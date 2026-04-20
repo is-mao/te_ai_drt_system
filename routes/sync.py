@@ -10,6 +10,7 @@ from services.db_sync import (
     push_database,
     pull_mine,
     pull_all,
+    pull_and_merge,
     list_readonly_databases,
     query_readonly_database,
     get_manifest,
@@ -140,6 +141,122 @@ def api_readonly_records(username):
     return jsonify(result)
 
 
+@sync_bp.route("/api/sync/pull-merge", methods=["POST"])
+@login_required
+def api_pull_merge():
+    """Pull selected users' data and merge into local DB with owner tag."""
+    from models.defect_report import DefectReport
+    from models import db
+    from datetime import datetime
+
+    data = request.get_json() or {}
+    usernames = data.get("usernames", [])
+    if not usernames or not isinstance(usernames, list):
+        return jsonify({"success": False, "error": "No users selected."}), 400
+
+    current_user = session.get("username", "unknown")
+    total_merged = 0
+    errors = []
+
+    for target in usernames:
+        target = target.strip()
+        if not target or target == current_user:
+            continue  # Skip self — own data is already in local DB
+
+        result = pull_and_merge(app_root=BASE_DIR, target_username=target)
+        if not result.get("success"):
+            errors.append(f"{target}: {result.get('error', 'unknown error')}")
+            continue
+
+        remote_records = result["records"]
+
+        # Delete existing records owned by this target user (full replace)
+        DefectReport.query.filter(DefectReport.owner == target).delete()
+        db.session.flush()
+
+        # Insert remote records with owner tag
+        for row in remote_records:
+            rec = DefectReport(
+                bu=row.get("bu", ""),
+                week_number=row.get("week_number", ""),
+                pcap_n=row.get("pcap_n", ""),
+                station=row.get("station", ""),
+                server=row.get("server", ""),
+                sn=row.get("sn", ""),
+                record_time=_parse_dt(row.get("record_time")),
+                failure=row.get("failure", ""),
+                defect_class=row.get("defect_class", ""),
+                defect_value=row.get("defect_value", ""),
+                root_cause=row.get("root_cause", ""),
+                action=row.get("action", ""),
+                pn=row.get("pn", ""),
+                component_sn=row.get("component_sn", ""),
+                log_content=row.get("log_content", ""),
+                sequence_log=row.get("sequence_log", ""),
+                buffer_log=row.get("buffer_log", ""),
+                ai_root_cause=row.get("ai_root_cause", ""),
+                status=row.get("status", "complete"),
+                created_by=row.get("created_by", target),
+                owner=target,
+                created_at=_parse_dt(row.get("created_at")) or datetime.now(),
+            )
+            db.session.add(rec)
+
+        total_merged += len(remote_records)
+
+    db.session.commit()
+
+    msg = f"Merged {total_merged} record(s) from {len(usernames)} user(s)."
+    if errors:
+        msg += f" Errors: {'; '.join(errors)}"
+
+    return jsonify({"success": True, "merged": total_merged, "errors": errors, "message": msg})
+
+
+@sync_bp.route("/api/sync/remove-merged/<username>", methods=["DELETE"])
+@login_required
+def api_remove_merged(username):
+    """Remove all merged records from a specific user."""
+    from models.defect_report import DefectReport
+    from models import db
+
+    count = DefectReport.query.filter(DefectReport.owner == username).delete()
+    db.session.commit()
+    return jsonify({"success": True, "removed": count, "message": f"Removed {count} record(s) from '{username}'."})
+
+
+@sync_bp.route("/api/sync/merged-users", methods=["GET"])
+@login_required
+def api_merged_users():
+    """List all users whose data has been merged into local DB."""
+    from models.defect_report import DefectReport
+    from models import db
+
+    current_user = session.get("username", "unknown")
+    rows = (
+        db.session.query(DefectReport.owner, db.func.count(DefectReport.id))
+        .filter(DefectReport.owner != "", DefectReport.owner != current_user, DefectReport.owner.isnot(None))
+        .group_by(DefectReport.owner)
+        .all()
+    )
+    users = [{"username": owner, "count": count} for owner, count in rows]
+    return jsonify({"success": True, "users": users})
+
+
+def _parse_dt(value):
+    """Parse datetime from various formats."""
+    if not value:
+        return None
+    if isinstance(value, str):
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+            try:
+                from datetime import datetime
+                return datetime.strptime(value, fmt)
+            except ValueError:
+                continue
+    return None
+
+
 # ---------- Admin-only API ----------
 
 
@@ -152,9 +269,6 @@ def api_manifest():
         current_user = session.get("username", "")
         users = []
         for username, info in manifest.items():
-            # Non-admin users only see their own entry
-            if not _is_admin() and username != current_user:
-                continue
             users.append(
                 {
                     "username": username,

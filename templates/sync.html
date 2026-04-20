@@ -43,6 +43,38 @@
             </div>
         </div>
     </div>
+
+    <!-- Pull & Merge Section -->
+    <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5><i class="bi bi-people me-2"></i>Pull & Merge Other Users' Data</h5>
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary btn-sm" onclick="doPullMerge()" id="btnPullMerge" disabled>
+                    <i class="bi bi-download me-1"></i>Pull & Merge Selected
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-2">
+                <i class="bi bi-info-circle me-1"></i>Select users to pull their data into your local database. Merged data will appear in Defects and Pending pages (read-only for non-admin users).
+            </p>
+            <div id="mergeListContainer">
+                <p class="text-muted text-center py-3">Loading...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Currently Merged Users -->
+    <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5><i class="bi bi-link-45deg me-2"></i>Currently Merged Data</h5>
+        </div>
+        <div class="card-body">
+            <div id="mergedUsersContainer">
+                <p class="text-muted text-center py-3">Loading...</p>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -53,6 +85,8 @@ const currentUser = '{{ session.get("username", "") }}';
 
 document.addEventListener('DOMContentLoaded', function() {
     refreshList();
+    loadMergeList();
+    loadMergedUsers();
 });
 
 function refreshList() {
@@ -72,13 +106,15 @@ async function loadMyData() {
         const myInfo = data.success && data.users ? data.users.find(u => u.username === currentUser) : null;
 
         let html = '<div class="table-responsive"><table class="table table-hover align-middle sync-table mb-0">';
-        html += '<thead><tr><th>User</th><th>Version</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>';
+        html += '<thead><tr><th>User</th><th>Version</th><th>Last Updated</th><th>File</th><th>Remote Path</th><th>Actions</th></tr></thead><tbody>';
 
         if (myInfo) {
             html += `<tr>
                 <td><div class="user-cell"><i class="bi bi-person-circle"></i><strong>${escapeHtml(myInfo.username)}</strong></div></td>
                 <td><span class="badge bg-secondary">v${myInfo.version}</span></td>
                 <td class="text-muted small">${escapeHtml(myInfo.updated_at || '-')}</td>
+                <td class="small font-monospace">${escapeHtml(myInfo.file_name || '-')}</td>
+                <td class="text-muted small font-monospace hash-cell" title="${escapeHtml(myInfo.file_path || '')}">${escapeHtml(myInfo.file_path || '-')}</td>
                 <td>
                     <button class="btn btn-primary btn-sm me-2" onclick="doPush('${escapeHtml(myInfo.username)}')" title="Push">
                         <i class="bi bi-cloud-arrow-up me-1"></i>Push
@@ -93,6 +129,8 @@ async function loadMyData() {
                 <td><div class="user-cell"><i class="bi bi-person-circle"></i><strong>${escapeHtml(currentUser)}</strong></div></td>
                 <td><span class="badge bg-light text-muted">No data</span></td>
                 <td class="text-muted small">-</td>
+                <td class="small font-monospace">-</td>
+                <td class="text-muted small font-monospace">-</td>
                 <td>
                     <button class="btn btn-primary btn-sm" onclick="doPush('${escapeHtml(currentUser)}')" title="Push">
                         <i class="bi bi-cloud-arrow-up me-1"></i>Push
@@ -221,6 +259,142 @@ async function doDelete(username) {
         refreshList();
     } catch (err) {
         showToast('Delete failed: ' + err.message, 'danger');
+    }
+}
+
+async function loadMergeList() {
+    const container = document.getElementById('mergeListContainer');
+    try {
+        // Admin sees all users from manifest; non-admin needs full list too
+        // For non-admin, the manifest API only returns their own entry,
+        // so we need admin to see full list. Non-admin can still merge if they know users exist.
+        const response = await apiCall('/api/sync/manifest');
+        const data = await response.json();
+
+        if (!data.success || !data.users || data.users.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center py-2">No remote databases available.</p>';
+            return;
+        }
+
+        const otherUsers = data.users.filter(u => u.username !== currentUser);
+        if (otherUsers.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center py-2">No other users\' data available to merge.</p>';
+            return;
+        }
+
+        let html = '<div class="table-responsive"><table class="table table-hover align-middle sync-table mb-0">';
+        html += '<thead><tr><th style="width:40px"><input type="checkbox" id="selectAllMerge" onchange="toggleAllMerge(this)"></th><th>User</th><th>Version</th><th>Last Updated</th></tr></thead><tbody>';
+
+        otherUsers.forEach(u => {
+            html += `<tr>
+                <td><input type="checkbox" class="merge-checkbox" value="${escapeHtml(u.username)}" onchange="updateMergeButton()"></td>
+                <td><div class="user-cell"><i class="bi bi-person-circle"></i><strong>${escapeHtml(u.username)}</strong></div></td>
+                <td><span class="badge bg-secondary">v${u.version}</span></td>
+                <td class="text-muted small">${escapeHtml(u.updated_at || '-')}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p class="text-danger text-center py-2"><i class="bi bi-exclamation-triangle me-1"></i>Failed to load user list.</p>';
+    }
+}
+
+function toggleAllMerge(checkbox) {
+    document.querySelectorAll('.merge-checkbox').forEach(cb => cb.checked = checkbox.checked);
+    updateMergeButton();
+}
+
+function updateMergeButton() {
+    const checked = document.querySelectorAll('.merge-checkbox:checked').length;
+    const btn = document.getElementById('btnPullMerge');
+    btn.disabled = checked === 0;
+    btn.innerHTML = checked > 0
+        ? `<i class="bi bi-download me-1"></i>Pull & Merge Selected (${checked})`
+        : '<i class="bi bi-download me-1"></i>Pull & Merge Selected';
+}
+
+async function doPullMerge() {
+    const selected = Array.from(document.querySelectorAll('.merge-checkbox:checked')).map(cb => cb.value);
+    if (selected.length === 0) {
+        showToast('No users selected.', 'warning');
+        return;
+    }
+
+    const ok = await appConfirm(
+        `Pull and merge data from ${selected.length} user(s): ${selected.join(', ')}.\n\nTheir records will appear in your Defects and Pending pages.`,
+        'Pull & Merge'
+    );
+    if (!ok) return;
+
+    showProgress('Pulling and merging data...');
+    try {
+        const response = await apiCall('/api/sync/pull-merge', {
+            method: 'POST',
+            body: { usernames: selected }
+        });
+        const result = await response.json();
+        showToast(result.success ? result.message : (result.error || 'Merge failed.'), result.success ? 'success' : 'danger');
+        loadMergedUsers();
+        document.querySelectorAll('.merge-checkbox').forEach(cb => cb.checked = false);
+        const selectAll = document.getElementById('selectAllMerge');
+        if (selectAll) selectAll.checked = false;
+        updateMergeButton();
+    } catch (err) {
+        showToast('Merge failed: ' + err.message, 'danger');
+    } finally {
+        hideProgress();
+    }
+}
+
+async function loadMergedUsers() {
+    const container = document.getElementById('mergedUsersContainer');
+    try {
+        const response = await apiCall('/api/sync/merged-users');
+        const data = await response.json();
+
+        if (!data.success || !data.users || data.users.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center py-2">No merged data. Use "Pull & Merge" above to import other users\' records.</p>';
+            return;
+        }
+
+        let html = '<div class="table-responsive"><table class="table table-hover align-middle sync-table mb-0">';
+        html += '<thead><tr><th>User</th><th>Records</th><th class="text-end">Actions</th></tr></thead><tbody>';
+
+        data.users.forEach(u => {
+            html += `<tr>
+                <td><div class="user-cell"><i class="bi bi-person-circle"></i><strong>${escapeHtml(u.username)}</strong></div></td>
+                <td><span class="badge bg-info">${u.count} record(s)</span></td>
+                <td class="text-end">
+                    <button class="btn btn-outline-danger btn-sm" onclick="doRemoveMerged('${escapeHtml(u.username)}')" title="Remove merged data">
+                        <i class="bi bi-x-lg me-1"></i>Remove
+                    </button>
+                </td>
+            </tr>`;
+        });
+
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p class="text-danger text-center py-2"><i class="bi bi-exclamation-triangle me-1"></i>Failed to load merged users.</p>';
+    }
+}
+
+async function doRemoveMerged(username) {
+    const ok = await appConfirm(
+        `Remove all merged records from "${username}"? This only removes the local copy — their remote data is not affected.`,
+        'Remove Merged Data'
+    );
+    if (!ok) return;
+
+    try {
+        const response = await apiCall(`/api/sync/remove-merged/${encodeURIComponent(username)}`, { method: 'DELETE' });
+        const result = await response.json();
+        showToast(result.success ? result.message : result.error, result.success ? 'success' : 'danger');
+        loadMergedUsers();
+    } catch (err) {
+        showToast('Remove failed: ' + err.message, 'danger');
     }
 }
 

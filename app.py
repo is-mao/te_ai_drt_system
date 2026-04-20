@@ -77,7 +77,7 @@ def _migrate_columns(app):
     try:
         inspector = inspect(db.engine)
         existing = {col["name"] for col in inspector.get_columns("defect_reports")}
-        needed = {"sequence_log": "TEXT", "buffer_log": "TEXT"}
+        needed = {"sequence_log": "TEXT", "buffer_log": "TEXT", "owner": "VARCHAR(64) DEFAULT ''"}
         dialect = db.engine.dialect.name  # sqlite, mysql, postgresql
         with db.engine.connect() as conn:
             for col_name, col_type in needed.items():
@@ -107,7 +107,7 @@ def _migrate_columns(app):
 
 # Default user accounts: (username, email, role)
 _DEFAULT_USERS = [
-    ("admin", None, "admin"),
+    ("admin", None, "user"),
     ("antzhou", "antzhou@cisco.com", "user"),
     ("bhu3", "bhu3@cisco.com", "user"),
     ("caspliu", "caspliu@cisco.com", "user"),
@@ -138,13 +138,17 @@ def _seed_defaults():
 
     # Seed default users if they don't exist
     for username, email, role in _DEFAULT_USERS:
-        if not User.query.filter_by(username=username).first():
+        existing = User.query.filter_by(username=username).first()
+        if not existing:
             user = User(username=username, email=email, role=role)
             if username == "admin":
                 user.set_password("admin123@@")
             else:
                 user.set_password(f"{username}123")
             db.session.add(user)
+        elif existing.role != role:
+            # Sync role from _DEFAULT_USERS (e.g. demote admin)
+            existing.role = role
     db.session.commit()
 
     # Seed default config

@@ -30,12 +30,23 @@ def defect_list():
         .all()
     )
     stations = [s[0] for s in station_options]
+    # Get distinct owners for filter
+    owner_options = (
+        db.session.query(DefectReport.owner)
+        .filter(DefectReport.owner.isnot(None), DefectReport.owner != "")
+        .distinct()
+        .order_by(DefectReport.owner)
+        .all()
+    )
+    owners = [o[0] for o in owner_options]
     return render_template(
         "defect_list.html",
         defect_classes=DEFECT_CLASSES,
         defect_values=DEFECT_VALUES,
         bu_options=BU_OPTIONS,
         station_options=stations,
+        owner_options=owners,
+        is_admin=session.get("role") == "admin",
     )
 
 
@@ -56,6 +67,11 @@ def defect_new():
 @login_required
 def defect_edit(id):
     record = DefectReport.query.get_or_404(id)
+    # Permission check: only admin or record owner can edit
+    if session.get("role") != "admin":
+        if record.owner and record.owner != session.get("username", ""):
+            from flask import abort
+            abort(403)
     return render_template(
         "defect_form.html",
         mode="edit",
@@ -102,6 +118,7 @@ def api_defect_list():
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
     search = request.args.get("search", "").strip()
+    owner = request.args.get("owner", "").strip()
     sort_by = request.args.get("sort_by", "record_time").strip()
     sort_dir = request.args.get("sort_dir", "desc").strip()
 
@@ -116,6 +133,8 @@ def api_defect_list():
         query = query.filter(DefectReport.defect_value == defect_value)
     if station:
         query = query.filter(DefectReport.station.ilike(f"%{station}%"))
+    if owner:
+        query = query.filter(DefectReport.owner == owner)
     if date_from:
         try:
             dt_from = datetime.strptime(date_from, "%Y-%m-%d")
@@ -157,6 +176,7 @@ def api_defect_list():
         "defect_value",
         "created_at",
         "updated_at",
+        "owner",
     }
     if sort_by not in allowed_sort_columns:
         sort_by = "record_time"
@@ -227,6 +247,10 @@ def api_defect_create():
 @login_required
 def api_defect_update(id):
     record = DefectReport.query.get_or_404(id)
+    # Only admin can modify records; non-admin can only modify their own (owner empty or matches)
+    if session.get("role") != "admin":
+        if record.owner and record.owner != session.get("username", ""):
+            return jsonify({"error": "Permission denied. Only admin can modify other users' records."}), 403
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid request body"}), 400
@@ -294,6 +318,10 @@ def api_defect_update(id):
 @login_required
 def api_defect_delete(id):
     record = DefectReport.query.get_or_404(id)
+    # Only admin can delete records; non-admin can only delete their own
+    if session.get("role") != "admin":
+        if record.owner and record.owner != session.get("username", ""):
+            return jsonify({"error": "Permission denied. Only admin can delete other users' records."}), 403
     db.session.delete(record)
     db.session.commit()
     return jsonify({"success": True, "message": f"Record #{id} deleted"})

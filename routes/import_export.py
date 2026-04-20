@@ -1,7 +1,7 @@
 from config import Config
 from models import db
 from models.defect_report import DefectReport
-from flask import Blueprint, request, jsonify, render_template, send_file
+from flask import Blueprint, request, jsonify, render_template, send_file, session
 from routes.auth import login_required
 from datetime import datetime
 from io import BytesIO
@@ -72,7 +72,7 @@ def import_page():
 @import_export_bp.route("/pending", methods=["GET"])
 @login_required
 def pending_page():
-    return render_template("pending.html", bu_options=Config.BU_OPTIONS)
+    return render_template("pending.html", bu_options=Config.BU_OPTIONS, is_admin=session.get("role") == "admin")
 
 
 @import_export_bp.route("/api/import/excel", methods=["POST"])
@@ -780,6 +780,10 @@ def api_draft_delete(id):
     record = DefectReport.query.get_or_404(id)
     if record.status != "draft":
         return jsonify({"success": False, "error": "Record is not a draft"}), 400
+    # Permission check: only admin or record owner can delete
+    if session.get("role") != "admin":
+        if record.owner and record.owner != session.get("username", ""):
+            return jsonify({"success": False, "error": "Permission denied"}), 403
     db.session.delete(record)
     db.session.commit()
     return jsonify({"success": True})

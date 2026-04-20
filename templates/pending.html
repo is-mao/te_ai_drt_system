@@ -47,11 +47,12 @@
                         <th style="width:10%;">ROOT CAUSE</th>
                         <th style="width:9%;">ACTION</th>
                         <th style="width:6%;">UPLOADED</th>
+                        <th style="width:5%;">OWNER</th>
                         <th class="text-center" style="width:9%;">ACTIONS</th>
                     </tr>
                 </thead>
                 <tbody id="draftsTableBody">
-                    <tr><td colspan="15" class="text-center text-muted py-5">
+                    <tr><td colspan="16" class="text-center text-muted py-5">
                         <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>Loading...
                     </td></tr>
                 </tbody>
@@ -92,6 +93,8 @@
 
     let draftPage = 1;
     let draftPerPage = 25;
+    const isAdmin = {{ 'true' if is_admin else 'false' }};
+    const currentUser = '{{ session.get("username", "") }}';
 
     function updatePendingBadge() {
         fetch('/api/draft-records?per_page=1&page=1')
@@ -134,7 +137,7 @@
         tbody.innerHTML = '';
 
         if (!data.data || !data.data.length) {
-            tbody.innerHTML = '<tr><td colspan="15" class="text-center text-muted py-5">' +
+            tbody.innerHTML = '<tr><td colspan="16" class="text-center text-muted py-5">' +
                 '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#bdbdbd" class="mb-2 d-block mx-auto" viewBox="0 0 16 16">' +
                 '<path d="M4.98 4a.5.5 0 0 0-.39.188L1.54 8H6a.5.5 0 0 1 .5.5 1.5 1.5 0 1 0 3 0A.5.5 0 0 1 10 8h4.46l-3.05-3.812A.5.5 0 0 0 11.02 4zm9.954 5H10.45a2.5 2.5 0 0 1-4.9 0H1.066l.32 2.562a.5.5 0 0 0 .497.438h12.234a.5.5 0 0 0 .496-.438zM3.809 3.563A1.5 1.5 0 0 1 4.981 3h6.038a1.5 1.5 0 0 1 1.172.563l3.7 4.625a.5.5 0 0 1 .105.374l-.39 3.124A1.5 1.5 0 0 1 14.117 13H1.883a1.5 1.5 0 0 1-1.489-1.314l-.39-3.124a.5.5 0 0 1 .106-.374z"/>' +
                 '</svg>No pending records.</td></tr>';
@@ -169,9 +172,10 @@
                 '<td>' + rcHtml + '</td>' +
                 '<td>' + actHtml + '</td>' +
                 '<td style="white-space:nowrap; color:#616161; font-size:0.85rem;">' + (r.created_at ? r.created_at.substring(5, 16).replace(' ', ' ') : '') + '</td>' +
+                '<td>' + ownerBadge(r.owner) + '</td>' +
                 '<td style="white-space:nowrap;" class="text-center">' +
-                    '<a href="/defects/' + r.id + '/edit" class="btn btn-outline-success btn-sm me-1 action-btn">Edit</a>' +
-                    '<button class="btn btn-outline-danger btn-sm action-btn draft-delete-btn" data-id="' + r.id + '">Del</button>' +
+                    (canEditDraft(r) ? '<a href="/defects/' + r.id + '/edit" class="btn btn-outline-success btn-sm me-1 action-btn">Edit</a>' +
+                    '<button class="btn btn-outline-danger btn-sm action-btn draft-delete-btn" data-id="' + r.id + '">Del</button>' : '<span class="text-muted small">Read-only</span>') +
                 '</td>';
             tbody.appendChild(tr);
         });
@@ -288,6 +292,18 @@
 
     function escapeHtml(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
     function escapeAttr(t) { return t.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+    function ownerBadge(owner) {
+        if (!owner) return '<span class="badge bg-light text-muted border" style="font-size:0.65rem;">local</span>';
+        if (owner === currentUser) return '<span class="badge bg-light text-muted border" style="font-size:0.65rem;">me</span>';
+        return '<span class="badge" style="background:#e8f5e9; color:#2e7d32; font-size:0.65rem;">' + escapeHtml(owner) + '</span>';
+    }
+
+    function canEditDraft(r) {
+        if (isAdmin) return true;
+        if (!r.owner || r.owner === currentUser) return true;
+        return false;
+    }
 
     // Initial load
     loadDrafts();

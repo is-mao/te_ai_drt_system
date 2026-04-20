@@ -27,6 +27,7 @@ class DefectReport(db.Model):
     # status: 'draft' = imported from Cesium (incomplete), 'complete' = ready for defect list
     status = db.Column(db.String(20), default="complete", index=True)
     created_by = db.Column(db.String(64))
+    owner = db.Column(db.String(64), default="", index=True)  # who owns this record (for multi-user pull)
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -50,6 +51,7 @@ class DefectReport(db.Model):
             "ai_root_cause": self.ai_root_cause,
             "status": self.status or "complete",
             "created_by": self.created_by,
+            "owner": self.owner or "",
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
             "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else None,
         }

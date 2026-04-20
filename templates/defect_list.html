@@ -67,6 +67,15 @@
                 </select>
             </div>
             <div class="col-auto">
+                <label class="form-label mb-0">Owner</label>
+                <select id="filterOwner" class="form-select form-select-sm" style="width:110px;">
+                    <option value="">All</option>
+                    {% for ow in owner_options %}
+                    <option value="{{ ow }}">{{ ow }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
                 <label class="form-label mb-0">Date From</label>
                 <input type="date" id="filterDateFrom" class="form-control form-control-sm" style="width:140px;">
             </div>
@@ -105,11 +114,12 @@
                     <th style="width:10%;">ROOT CAUSE</th>
                     <th style="width:9%;">ACTION</th>
                     <th class="sortable" data-sort="updated_at" style="width:6%;">UPDATED <span class="sort-arrow"></span></th>
+                    <th class="sortable" data-sort="owner" style="width:5%;">OWNER <span class="sort-arrow"></span></th>
                     <th class="text-center" style="width:10.5%;">ACTIONS</th>
                 </tr>
             </thead>
             <tbody id="defectTableBody">
-                <tr><td colspan="14" class="text-center py-5 text-muted">
+                <tr><td colspan="15" class="text-center py-5 text-muted">
                     <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>Loading...
                 </td></tr>
             </tbody>
@@ -139,6 +149,8 @@
 {% block scripts %}
 <script>
 (function () {
+    const isAdmin = {{ 'true' if is_admin else 'false' }};
+    const currentUser = '{{ session.get("username", "") }}';
     let currentPage = 1;
     let perPage = 25;
     let sortBy = 'updated_at';
@@ -162,6 +174,7 @@
         const dc = document.getElementById('filterDefectClass').value;
         const dv = document.getElementById('filterDefectValue').value;
         const st = document.getElementById('filterStation').value.trim();
+        const ow = document.getElementById('filterOwner').value;
         const df = document.getElementById('filterDateFrom').value;
         const dt = document.getElementById('filterDateTo').value;
         const se = document.getElementById('filterSearch').value.trim();
@@ -170,18 +183,19 @@
         if (dc) params.set('defect_class', dc);
         if (dv) params.set('defect_value', dv);
         if (st) params.set('station', st);
+        if (ow) params.set('owner', ow);
         if (df) params.set('date_from', df);
         if (dt) params.set('date_to', dt);
         if (se) params.set('search', se);
 
-        tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-muted">Loading...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" class="text-center py-4 text-muted">Loading...</td></tr>';
 
         try {
             const resp = await fetch('/api/defects?' + params.toString());
             const json = await resp.json();
 
             if (!json.data || json.data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-muted">No records found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="15" class="text-center py-4 text-muted">No records found.</td></tr>';
                 totalCount.textContent = '0 records';
                 renderPagination(0, 1);
                 return;
@@ -191,7 +205,7 @@
             renderTable(json.data);
             renderPagination(json.total_pages, json.page);
         } catch (err) {
-            tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-danger">Error loading data.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="15" class="text-center py-4 text-danger">Error loading data.</td></tr>';
             console.error(err);
         }
     }
@@ -224,6 +238,19 @@
     function textOrNotSet(val, maxLen) {
         if (!val || !val.trim()) return '<span class="badge" style="background:#fff3cd; color:#856404; font-weight:500;">Not set</span>';
         return '<span style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;" title="' + escapeHtml(val) + '">' + escapeHtml(truncate(val, maxLen)) + '</span>';
+    }
+
+    function ownerBadge(owner) {
+        if (!owner) return '<span class="badge bg-light text-muted border" style="font-size:0.65rem;">local</span>';
+        if (owner === currentUser) return '<span class="badge bg-light text-muted border" style="font-size:0.65rem;">me</span>';
+        return '<span class="badge" style="background:#e8f5e9; color:#2e7d32; font-size:0.65rem;">' + escapeHtml(owner) + '</span>';
+    }
+
+    function canEdit(r) {
+        // Admin can edit all; non-admin can only edit own records (owner empty or matches)
+        if (isAdmin) return true;
+        if (!r.owner || r.owner === currentUser) return true;
+        return false;
     }
 
     // Check if a record was just saved
@@ -262,10 +289,11 @@
                 '<td title="' + escapeHtml(r.root_cause || '') + '" style="color:#455a64;">' + textOrNotSet(r.root_cause, 20) + '</td>' +
                 '<td title="' + escapeHtml(r.action || '') + '" style="color:#455a64;">' + textOrNotSet(r.action, 20) + '</td>' +
                 '<td style="color:#757575;">' + (r.updated_at ? r.updated_at.replace('T',' ').substring(5,16) : '-') + '</td>' +
+                '<td>' + ownerBadge(r.owner) + '</td>' +
                 '<td class="text-center" style="white-space:nowrap;">' +
                     '<a href="/defects/' + r.id + '" class="btn btn-outline-primary btn-sm me-1" style="padding:0.15rem 0.4rem; font-size:0.72rem;" title="View">View</a>' +
-                    '<a href="/defects/' + r.id + '/edit" class="btn btn-outline-success btn-sm me-1" style="padding:0.15rem 0.4rem; font-size:0.72rem;" title="Edit">Edit</a>' +
-                    '<button class="btn btn-outline-danger btn-sm delete-btn" style="padding:0.15rem 0.4rem; font-size:0.72rem;" data-id="' + r.id + '" title="Delete">Del</button>' +
+                    (canEdit(r) ? '<a href="/defects/' + r.id + '/edit" class="btn btn-outline-success btn-sm me-1" style="padding:0.15rem 0.4rem; font-size:0.72rem;" title="Edit">Edit</a>' +
+                    '<button class="btn btn-outline-danger btn-sm delete-btn" style="padding:0.15rem 0.4rem; font-size:0.72rem;" data-id="' + r.id + '" title="Delete">Del</button>' : '') +
                 '</td>' +
                 '</tr>';
         });
@@ -426,6 +454,7 @@
         document.getElementById('filterDefectClass').value = '';
         document.getElementById('filterDefectValue').value = '';
         document.getElementById('filterStation').value = '';
+        document.getElementById('filterOwner').value = '';
         document.getElementById('filterDateFrom').value = '';
         document.getElementById('filterDateTo').value = '';
         document.getElementById('filterSearch').value = '';

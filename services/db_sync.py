@@ -317,6 +317,49 @@ def get_manifest():
         return _read_remote_json(sftp, manifest_path, default={})
 
 
+def pull_and_merge(app_root: str, target_username: str):
+    """
+    Download a specific user's database from the remote server,
+    read all their defect_reports, and merge them into the local DB
+    with owner = target_username.
+
+    Existing records owned by that user are deleted first (full replace).
+    Returns dict with status info.
+    """
+    import tempfile
+
+    remote_db_path = f"{DEFAULT_REMOTE_BASE}/{target_username}.db"
+
+    with SFTPSession() as sftp:
+        if not _remote_file_exists(sftp, remote_db_path):
+            return {"success": False, "error": f"No remote database found for user '{target_username}'."}
+
+        # Download to temp file
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
+        tmp.close()
+        try:
+            sftp.get(remote_db_path, tmp.name)
+        except Exception as e:
+            os.unlink(tmp.name)
+            return {"success": False, "error": f"Failed to download: {e}"}
+
+    # Read records from downloaded DB
+    try:
+        conn = sqlite3.connect(f"file:{tmp.name}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM defect_reports").fetchall()
+        records = [dict(row) for row in rows]
+        conn.close()
+    except Exception as e:
+        os.unlink(tmp.name)
+        return {"success": False, "error": f"Failed to read remote database: {e}"}
+    finally:
+        if os.path.exists(tmp.name):
+            os.unlink(tmp.name)
+
+    return {"success": True, "records": records, "count": len(records)}
+
+
 def get_sync_log(limit: int = 50):
     """Fetch recent sync log entries."""
     sync_log_path = f"{DEFAULT_REMOTE_BASE}/sync_log.json"
