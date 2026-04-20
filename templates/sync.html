@@ -19,14 +19,16 @@
 
     <!-- Progress -->
     <div id="syncProgress" class="sync-progress mb-4" style="display: none;">
-        <div class="card">
+        <div class="card border-0 shadow-sm" style="border-left: 3px solid var(--primary) !important;">
             <div class="card-body py-3">
-                <div class="d-flex align-items-center">
+                <div class="d-flex align-items-center mb-2">
                     <div class="spinner-border spinner-border-sm text-primary me-3" role="status"></div>
                     <span id="syncStatusText" class="fw-semibold">Connecting to server...</span>
+                    <span id="syncPercent" class="ms-auto text-muted small fw-semibold"></span>
                 </div>
-                <div class="progress mt-2" style="height: 3px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 100%"></div>
+                <div class="progress" style="height: 6px; border-radius: 3px; background: #e9ecef;">
+                    <div id="syncProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                         style="width: 0%; background: linear-gradient(90deg, var(--primary-light), var(--primary)); border-radius: 3px; transition: width 0.4s ease;"></div>
                 </div>
             </div>
         </div>
@@ -398,12 +400,42 @@ async function doRemoveMerged(username) {
     }
 }
 
+let _progressTimer = null;
+
 function showProgress(text) {
     document.getElementById('syncProgress').style.display = 'block';
     document.getElementById('syncStatusText').textContent = text;
+    const bar = document.getElementById('syncProgressBar');
+    const pct = document.getElementById('syncPercent');
+    bar.style.width = '0%';
+    pct.textContent = '';
+
+    // Simulate progress: fast at first, slows down approaching 90%
+    let progress = 0;
+    clearInterval(_progressTimer);
+    _progressTimer = setInterval(() => {
+        if (progress < 30) progress += 8;
+        else if (progress < 60) progress += 4;
+        else if (progress < 85) progress += 1.5;
+        else if (progress < 92) progress += 0.3;
+        else { clearInterval(_progressTimer); return; }
+        progress = Math.min(progress, 92);
+        bar.style.width = progress + '%';
+        pct.textContent = Math.round(progress) + '%';
+    }, 200);
 }
+
 function hideProgress() {
-    document.getElementById('syncProgress').style.display = 'none';
+    clearInterval(_progressTimer);
+    const bar = document.getElementById('syncProgressBar');
+    const pct = document.getElementById('syncPercent');
+    bar.style.width = '100%';
+    pct.textContent = '100%';
+    setTimeout(() => {
+        document.getElementById('syncProgress').style.display = 'none';
+        bar.style.width = '0%';
+        pct.textContent = '';
+    }, 500);
 }
 </script>
 {% endblock %}
