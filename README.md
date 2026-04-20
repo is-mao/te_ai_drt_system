@@ -55,9 +55,6 @@ cp .env.example .env
 编辑 `.env` 文件，设置以下关键项：
 
 ```dotenv
-# 数据库类型（默认 sqlite，无需额外配置）
-DRT_DB_TYPE=sqlite
-
 # Gemini AI API Key（从 https://aistudio.google.com/apikey 获取）
 GEMINI_API_KEY=AIzaSy...
 
@@ -71,7 +68,7 @@ DRT_SECRET_KEY=your-random-secret-key
 python app.py
 ```
 
-打开 http://127.0.0.1:5001，默认账号：`admin` / `admin123`
+打开 http://127.0.0.1:5001
 
 ---
 
@@ -87,15 +84,9 @@ powershell -ExecutionPolicy Bypass -File .\start_drt.ps1 -Status  # 查看状态
 
 ---
 
-## 数据库选项
+## 数据库
 
-| 模式 | 配置 | 适用场景 |
-|------|------|----------|
-| **SQLite**（默认） | `DRT_DB_TYPE=sqlite` | 单用户、本地开发、零配置 |
-| **MySQL** | `DRT_DB_TYPE=mysql` | 多用户、共享、生产环境 |
-| **PostgreSQL** | `DRT_DB_TYPE=postgresql` | 云部署（Render 等） |
-
-SQLite 数据库文件自动创建在项目根目录 `drt_system.db`。
+使用 SQLite，零配置，数据库文件自动创建在项目根目录 `drt_system.db`。
 
 ---
 
