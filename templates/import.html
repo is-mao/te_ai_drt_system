@@ -45,7 +45,7 @@
                     </select>
                 </div>
                 <div id="dropZone" class="upload-zone">
-                    <i class="bi bi-file-earmark-spreadsheet" style="font-size: 3rem; color: var(--gray-400);"></i>
+                    <i class="bi bi-file-earmark-spreadsheet" style="font-size: 3rem; color: var(--primary); opacity: 0.5;"></i>
                     <p class="text-muted mb-1 mt-2">Drag and drop your <strong>.xlsx</strong> file here</p>
                     <p class="text-muted small mb-2">or</p>
                     <button type="button" class="btn btn-outline-primary btn-sm" id="browseBtn"><i class="bi bi-folder2-open me-1"></i>Browse Files</button>
@@ -77,18 +77,24 @@
         <div class="card mb-4 d-none" id="resultsCard">
             <div class="card-header"><i class="bi bi-check-circle me-2"></i>Import Results</div>
             <div class="card-body">
-                <div class="row text-center mb-3">
+                <div class="row g-3 mb-3">
                     <div class="col-4">
-                        <div class="h4 mb-0 text-success" id="resultImported">0</div>
-                        <div class="small text-muted">Imported</div>
+                        <div class="import-stat stat-success text-center">
+                            <div class="stat-value" id="resultImported">0</div>
+                            <div class="stat-label">Imported</div>
+                        </div>
                     </div>
                     <div class="col-4">
-                        <div class="h4 mb-0 text-warning" id="resultSkipped">0</div>
-                        <div class="small text-muted">Skipped</div>
+                        <div class="import-stat stat-warning text-center">
+                            <div class="stat-value" id="resultSkipped">0</div>
+                            <div class="stat-label">Skipped</div>
+                        </div>
                     </div>
                     <div class="col-4">
-                        <div class="h4 mb-0 text-danger" id="resultErrors">0</div>
-                        <div class="small text-muted">Errors</div>
+                        <div class="import-stat stat-danger text-center">
+                            <div class="stat-value" id="resultErrors">0</div>
+                            <div class="stat-label">Errors</div>
+                        </div>
                     </div>
                 </div>
                 <div id="errorList" class="d-none">
@@ -120,8 +126,8 @@
                 <div class="alert alert-info small py-2 mb-3">
                     <strong>Auto-mapped fields:</strong> Record Time → record_time, Serial Number → SN, Failing Test Name → Failure, Machine → Server, UUT Type → PCAP/N, Test Area → Station. Week# auto-calculated.
                 </div>
-                <div id="cesiumDropZone" class="upload-zone" style="background: var(--purple-light);">
-                    <i class="bi bi-database" style="font-size: 3rem; color: var(--purple);"></i>
+                <div id="cesiumDropZone" class="upload-zone">
+                    <i class="bi bi-database" style="font-size: 3rem; color: var(--purple); opacity: 0.6;"></i>
                     <p class="text-muted mb-1 mt-2">Drop Cesium <strong>.xlsx</strong> export file here</p>
                     <p class="text-muted small mb-2">or</p>
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="cesiumBrowseBtn"><i class="bi bi-folder2-open me-1"></i>Browse Files</button>
@@ -153,18 +159,24 @@
         <div class="card mb-4 d-none" id="cesiumResultsCard">
             <div class="card-header"><i class="bi bi-check-circle me-2"></i>Import Results</div>
             <div class="card-body">
-                <div class="row text-center mb-3">
+                <div class="row g-3 mb-3">
                     <div class="col-4">
-                        <div class="h4 mb-0 text-success" id="cesiumResultImported">0</div>
-                        <div class="small text-muted">Imported as Pending</div>
+                        <div class="import-stat stat-success text-center">
+                            <div class="stat-value" id="cesiumResultImported">0</div>
+                            <div class="stat-label">Imported as Pending</div>
+                        </div>
                     </div>
                     <div class="col-4">
-                        <div class="h4 mb-0 text-warning" id="cesiumResultSkipped">0</div>
-                        <div class="small text-muted">Skipped (Duplicates)</div>
+                        <div class="import-stat stat-warning text-center">
+                            <div class="stat-value" id="cesiumResultSkipped">0</div>
+                            <div class="stat-label">Skipped (Duplicates)</div>
+                        </div>
                     </div>
                     <div class="col-4">
-                        <div class="h4 mb-0 text-danger" id="cesiumResultErrors">0</div>
-                        <div class="small text-muted">Errors</div>
+                        <div class="import-stat stat-danger text-center">
+                            <div class="stat-value" id="cesiumResultErrors">0</div>
+                            <div class="stat-label">Errors</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -200,10 +212,10 @@
         browse.addEventListener('click', () => fi.click());
         fi.addEventListener('change', function () { if (this.files.length > 0) pick(this.files[0]); });
 
-        dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = '#1565c0'; });
-        dz.addEventListener('dragleave', e => { e.preventDefault(); dz.style.borderColor = '#bdbdbd'; });
+        dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+        dz.addEventListener('dragleave', e => { e.preventDefault(); dz.classList.remove('dragover'); });
         dz.addEventListener('drop', e => {
-            e.preventDefault(); dz.style.borderColor = '#bdbdbd';
+            e.preventDefault(); dz.classList.remove('dragover');
             const f = e.dataTransfer.files[0];
             if (f && f.name.endsWith('.xlsx')) pick(f);
             else showToast('Only .xlsx files accepted', 'danger');

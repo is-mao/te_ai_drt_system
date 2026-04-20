@@ -14,22 +14,19 @@
             <button class="btn btn-outline-info btn-sm" onclick="testConnection()">
                 <i class="bi bi-plug me-1"></i>Test Connection
             </button>
-            <button class="btn btn-outline-primary btn-sm" onclick="refreshList()">
-                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-            </button>
         </div>
     </div>
 
     <!-- Progress -->
-    <div id="syncProgress" class="mb-4" style="display: none;">
+    <div id="syncProgress" class="sync-progress mb-4" style="display: none;">
         <div class="card">
-            <div class="card-body">
+            <div class="card-body py-3">
                 <div class="d-flex align-items-center">
                     <div class="spinner-border spinner-border-sm text-primary me-3" role="status"></div>
-                    <span id="syncStatusText">Connecting to server...</span>
+                    <span id="syncStatusText" class="fw-semibold">Connecting to server...</span>
                 </div>
-                <div class="progress mt-2" style="height: 4px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                <div class="progress mt-2" style="height: 3px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 100%"></div>
                 </div>
             </div>
         </div>
@@ -39,9 +36,6 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5><i class="bi bi-database me-2"></i>Remote Databases</h5>
-            {% if session.get('role') == 'admin' %}
-            <span class="badge bg-warning text-dark"><i class="bi bi-shield-lock me-1"></i>Admin — All Users</span>
-            {% endif %}
         </div>
         <div class="card-body">
             <div id="dbListContainer">
@@ -77,12 +71,12 @@ async function loadMyData() {
 
         const myInfo = data.success && data.users ? data.users.find(u => u.username === currentUser) : null;
 
-        let html = '<div class="table-responsive"><table class="table table-hover align-middle mb-0">';
+        let html = '<div class="table-responsive"><table class="table table-hover align-middle sync-table mb-0">';
         html += '<thead><tr><th>User</th><th>Version</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>';
 
         if (myInfo) {
             html += `<tr>
-                <td><i class="bi bi-person-circle me-1"></i><strong>${escapeHtml(myInfo.username)}</strong></td>
+                <td><div class="user-cell"><i class="bi bi-person-circle"></i><strong>${escapeHtml(myInfo.username)}</strong></div></td>
                 <td><span class="badge bg-secondary">v${myInfo.version}</span></td>
                 <td class="text-muted small">${escapeHtml(myInfo.updated_at || '-')}</td>
                 <td>
@@ -96,7 +90,7 @@ async function loadMyData() {
             </tr>`;
         } else {
             html += `<tr>
-                <td><i class="bi bi-person-circle me-1"></i><strong>${escapeHtml(currentUser)}</strong></td>
+                <td><div class="user-cell"><i class="bi bi-person-circle"></i><strong>${escapeHtml(currentUser)}</strong></div></td>
                 <td><span class="badge bg-light text-muted">No data</span></td>
                 <td class="text-muted small">-</td>
                 <td>
@@ -110,7 +104,7 @@ async function loadMyData() {
         html += '</tbody></table></div>';
         container.innerHTML = html;
     } catch (err) {
-        container.innerHTML = '<p class="text-danger text-center py-3">Failed to load data. Check connection.</p>';
+        container.innerHTML = '<p class="text-danger text-center py-3"><i class="bi bi-exclamation-triangle me-1"></i>Failed to load data. Check connection.</p>';
     }
 }
 
@@ -121,29 +115,29 @@ async function loadManifest() {
         const data = await response.json();
 
         if (!data.success || !data.users || data.users.length === 0) {
-            container.innerHTML = '<p class="text-muted text-center py-3">No databases on remote server. Push your data first.</p>';
+            container.innerHTML = '<div class="sync-empty"><i class="bi bi-cloud-slash"></i><p>No databases on remote server.<br>Push your data first.</p></div>';
             return;
         }
 
-        let html = '<div class="table-responsive"><table class="table table-hover align-middle mb-0">';
-        html += '<thead><tr><th>User</th><th>Version</th><th>Last Updated</th><th>Hash</th><th>Actions</th></tr></thead><tbody>';
+        let html = '<div class="table-responsive"><table class="table table-hover align-middle sync-table mb-0">';
+        html += '<thead><tr><th>User</th><th>Version</th><th>Last Updated</th><th>Hash</th><th class="text-end">Actions</th></tr></thead><tbody>';
 
         data.users.forEach(u => {
             html += `<tr>
-                <td><i class="bi bi-person-circle me-1"></i><strong>${escapeHtml(u.username)}</strong>
+                <td><div class="user-cell"><i class="bi bi-person-circle"></i><strong>${escapeHtml(u.username)}</strong>
                     ${u.username === currentUser ? '<span class="badge bg-info ms-1">me</span>' : ''}
-                </td>
+                </div></td>
                 <td><span class="badge bg-secondary">v${u.version}</span></td>
                 <td class="text-muted small">${escapeHtml(u.updated_at || '-')}</td>
-                <td class="text-muted small font-monospace">${escapeHtml(u.file_hash || '-')}</td>
-                <td>
-                    <button class="btn btn-outline-primary btn-sm me-1" onclick="doPush('${escapeHtml(u.username)}')" title="Push to remote">
+                <td class="text-muted small font-monospace hash-cell" title="${escapeHtml(u.file_hash || '')}">${escapeHtml(u.file_hash || '-')}</td>
+                <td class="text-end text-nowrap">
+                    <button class="btn btn-outline-primary btn-sm sync-action-btn me-1" onclick="doPush('${escapeHtml(u.username)}')" title="Push to remote">
                         <i class="bi bi-cloud-arrow-up"></i>
                     </button>
-                    <button class="btn btn-outline-success btn-sm me-1" onclick="doPull('${escapeHtml(u.username)}')" title="Pull from remote">
+                    <button class="btn btn-outline-success btn-sm sync-action-btn me-1" onclick="doPull('${escapeHtml(u.username)}')" title="Pull from remote">
                         <i class="bi bi-cloud-arrow-down"></i>
                     </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="doDelete('${escapeHtml(u.username)}')" title="Delete from remote">
+                    <button class="btn btn-outline-danger btn-sm sync-action-btn" onclick="doDelete('${escapeHtml(u.username)}')" title="Delete from remote">
                         <i class="bi bi-trash"></i>
                     </button>
                 </td>
@@ -153,7 +147,7 @@ async function loadManifest() {
         html += '</tbody></table></div>';
         container.innerHTML = html;
     } catch (err) {
-        container.innerHTML = '<p class="text-danger text-center py-3">Failed to load remote manifest.</p>';
+        container.innerHTML = '<p class="text-danger text-center py-3"><i class="bi bi-exclamation-triangle me-1"></i>Failed to load remote manifest.</p>';
     }
 }
 

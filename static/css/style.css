@@ -557,21 +557,160 @@ textarea.log-textarea {
     z-index: 9999;
 }
 
+/* ---- Nav Tabs ---- */
+.nav-tabs {
+    border-bottom: 2px solid var(--gray-200);
+    gap: 0.25rem;
+}
+
+.nav-tabs .nav-link {
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 0.88rem;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 0.55rem 1.1rem;
+    margin-bottom: -2px;
+    border-radius: 0;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.nav-tabs .nav-link:hover {
+    color: var(--primary);
+    border-bottom-color: var(--primary-light);
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--primary-dark);
+    border-bottom-color: var(--primary);
+    background: transparent;
+}
+
 /* ---- Upload / Drop Zone ---- */
 .upload-zone {
     border: 2px dashed var(--gray-300);
     border-radius: var(--radius-md);
-    padding: 2.5rem;
+    padding: 2.5rem 1.5rem;
     text-align: center;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
     background: var(--gray-50);
 }
 
-.upload-zone:hover,
+.upload-zone:hover {
+    border-color: var(--primary-light);
+    background: var(--primary-surface);
+}
+
 .upload-zone.dragover {
-    border-color: var(--accent);
-    background-color: var(--accent-light);
+    border-color: var(--primary);
+    background: var(--primary-surface);
+    box-shadow: 0 0 0 4px rgba(4, 159, 217, 0.1);
+}
+
+.upload-zone .bi {
+    transition: transform 0.2s;
+}
+
+.upload-zone:hover .bi {
+    transform: scale(1.08);
+}
+
+/* ---- Import Result Stats ---- */
+.import-stat {
+    padding: 1rem 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s;
+}
+
+.import-stat .stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.import-stat .stat-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+}
+
+.import-stat.stat-success { background: var(--success-light); }
+.import-stat.stat-success .stat-value { color: var(--success); }
+
+.import-stat.stat-warning { background: var(--warning-light); }
+.import-stat.stat-warning .stat-value { color: var(--warning); }
+
+.import-stat.stat-danger { background: var(--danger-light); }
+.import-stat.stat-danger .stat-value { color: var(--danger); }
+
+/* ---- Sync Page ---- */
+.sync-progress .card {
+    border-left: 4px solid var(--primary);
+    background: var(--primary-surface);
+}
+
+.sync-table th {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    border-bottom: 2px solid var(--gray-200);
+    padding: 0.6rem 0.75rem;
+    white-space: nowrap;
+}
+
+.sync-table td {
+    padding: 0.65rem 0.75rem;
+    vertical-align: middle;
+}
+
+.sync-table .user-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.sync-table .user-cell i {
+    color: var(--primary);
+    font-size: 1.1rem;
+}
+
+.sync-table .hash-cell {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sync-action-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    transition: all 0.2s ease;
+}
+
+.sync-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.sync-empty {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.sync-empty i {
+    font-size: 2.5rem;
+    color: var(--gray-300);
+    display: block;
+    margin-bottom: 0.75rem;
 }
 
 /* Log drop zone */
@@ -672,6 +811,49 @@ textarea.log-textarea {
     width: 20px;
     height: 20px;
     color: var(--primary);
+}
+
+.settings-section .api-key-group .input-group {
+    max-width: 480px;
+}
+
+.settings-section .api-key-group .btn-outline-secondary {
+    border-color: var(--gray-300);
+    color: var(--text-secondary);
+}
+
+.settings-section .api-key-group .btn-outline-secondary:hover {
+    background: var(--gray-100);
+    color: var(--text-primary);
+}
+
+.settings-fallback-card {
+    background: var(--primary-surface) !important;
+    border: 1px solid rgba(4, 159, 217, 0.15) !important;
+}
+
+.settings-fallback-card h6 {
+    color: var(--primary-dark);
+}
+
+.settings-fallback-card ol li {
+    padding: 0.15rem 0;
+}
+
+.settings-about {
+    border-top: 3px solid var(--primary);
+}
+
+.settings-about .version-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    background: var(--primary-surface);
+    color: var(--primary-dark);
+    font-size: 0.78rem;
+    font-weight: 600;
 }
 
 /* ---- Confirm Modal ---- */
