@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Database Sync - AI DRT System{% endblock %}
+
+{% block content %}
+<div class="settings-section">
+    <!-- Page Header -->
+    <div class="page-header">
+        <div>
+            <h4><i class="bi bi-cloud-arrow-up-down me-2" style="color: var(--primary);"></i>Database Sync</h4>
+            <div class="page-subtitle">Sync databases with remote server</div>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-info btn-sm" onclick="testConnection()">
+                <i class="bi bi-plug me-1"></i>Test Connection
+            </button>
+            <button class="btn btn-outline-primary btn-sm" onclick="refreshList()">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Progress -->
+    <div id="syncProgress" class="mb-4" style="display: none;">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm text-primary me-3" role="status"></div>
+                    <span id="syncStatusText">Connecting to server...</span>
+                </div>
+                <div class="progress mt-2" style="height: 4px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Database Table -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5><i class="bi bi-database me-2"></i>Remote Databases</h5>
+            {% if session.get('role') == 'admin' %}
+            <span class="badge bg-warning text-dark"><i class="bi bi-shield-lock me-1"></i>Admin — All Users</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <div id="dbListContainer">
+                <p class="text-muted text-center py-3">Loading...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const isAdmin = {{ 'true' if session.get('role') == 'admin' else 'false' }};
+const currentUser = '{{ session.get("username", "") }}';
+
+document.addEventListener('DOMContentLoaded', function() {
+    refreshList();
+});
+
+function refreshList() {
+    if (isAdmin) {
+        loadManifest();
+    } else {
+        loadMyData();
+    }
+}
+
+async function loadMyData() {
+    const container = document.getElementById('dbListContainer');
+    try {
+        const response = await apiCall('/api/sync/manifest');
+        const data = await response.json();
+
+        const myInfo = data.success && data.users ? data.users.find(u => u.username === currentUser) : null;
+
+        let html = '<div class="table-responsive"><table class="table table-hover align-middle mb-0">';
+        html += '<thead><tr><th>User</th><th>Version</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>';
+
+        if (myInfo) {
+            html += `<tr>
+                <td><i class="bi bi-person-circle me-1"></i><strong>${escapeHtml(myInfo.username)}</strong></td>
+                <td><span class="badge bg-secondary">v${myInfo.version}</span></td>
+                <td class="text-muted small">${escapeHtml(myInfo.updated_at || '-')}</td>
+                <td>
+                    <button class="btn btn-primary btn-sm me-2" onclick="doPush('${escapeHtml(myInfo.username)}')" title="Push">
+                        <i class="bi bi-cloud-arrow-up me-1"></i>Push
+                    </button>
+                    <button class="btn btn-success btn-sm" onclick="doPull('${escapeHtml(myInfo.username)}')" title="Pull">
+                        <i class="bi bi-cloud-arrow-down me-1"></i>Pull
+                    </button>
+                </td>
+            </tr>`;
+        } else {
+            html += `<tr>
+                <td><i class="bi bi-person-circle me-1"></i><strong>${escapeHtml(currentUser)}</strong></td>
+                <td><span class="badge bg-light text-muted">No data</span></td>
+                <td class="text-muted small">-</td>
+                <td>
+                    <button class="btn btn-primary btn-sm" onclick="doPush('${escapeHtml(currentUser)}')" title="Push">
+                        <i class="bi bi-cloud-arrow-up me-1"></i>Push
+                    </button>
+                </td>
+            </tr>`;
+        }
+
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p class="text-danger text-center py-3">Failed to load data. Check connection.</p>';
+    }
+}
+
+async function loadManifest() {
+    const container = document.getElementById('dbListContainer');
+    try {
+        const response = await apiCall('/api/sync/manifest');
+        const data = await response.json();
+
+        if (!data.success || !data.users || data.users.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center py-3">No databases on remote server. Push your data first.</p>';
+            return;
+        }
+
+        let html = '<div class="table-responsive"><table class="table table-hover align-middle mb-0">';
+        html += '<thead><tr><th>User</th><th>Version</th><th>Last Updated</th><th>Hash</th><th>Actions</th></tr></thead><tbody>';
+
+        data.users.forEach(u => {
+            html += `<tr>
+                <td><i class="bi bi-person-circle me-1"></i><strong>${escapeHtml(u.username)}</strong>
+                    ${u.username === currentUser ? '<span class="badge bg-info ms-1">me</span>' : ''}
+                </td>
+                <td><span class="badge bg-secondary">v${u.version}</span></td>
+                <td class="text-muted small">${escapeHtml(u.updated_at || '-')}</td>
+                <td class="text-muted small font-monospace">${escapeHtml(u.file_hash || '-')}</td>
+                <td>
+                    <button class="btn btn-outline-primary btn-sm me-1" onclick="doPush('${escapeHtml(u.username)}')" title="Push to remote">
+                        <i class="bi bi-cloud-arrow-up"></i>
+                    </button>
+                    <button class="btn btn-outline-success btn-sm me-1" onclick="doPull('${escapeHtml(u.username)}')" title="Pull from remote">
+                        <i class="bi bi-cloud-arrow-down"></i>
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="doDelete('${escapeHtml(u.username)}')" title="Delete from remote">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>`;
+        });
+
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p class="text-danger text-center py-3">Failed to load remote manifest.</p>';
+    }
+}
+
+async function testConnection() {
+    try {
+        const response = await apiCall('/api/sync/test-connection', { method: 'POST', body: {} });
+        const data = await response.json();
+        showToast(data.success ? data.message : ('Connection failed: ' + data.error), data.success ? 'success' : 'danger');
+    } catch (err) {
+        showToast('Connection failed: ' + err.message, 'danger');
+    }
+}
+
+async function doPush(username) {
+    const msg = username === currentUser
+        ? 'Upload your local database to the remote server, overwriting your previous remote copy.'
+        : `Upload local database to the remote server as "${username}".`;
+    const ok = await appConfirm(msg, 'Push Database');
+    if (!ok) return;
+
+    showProgress('Uploading database...');
+    try {
+        const body = {};
+        if (isAdmin && username !== currentUser) body.target_user = username;
+        const response = await apiCall('/api/sync/push', { method: 'POST', body });
+        const result = await response.json();
+        showToast(result.success ? result.message : (result.error || 'Push failed.'), result.success ? 'success' : 'danger');
+        refreshList();
+    } catch (err) {
+        showToast('Push failed: ' + err.message, 'danger');
+    } finally {
+        hideProgress();
+    }
+}
+
+async function doPull(username) {
+    const msg = username === currentUser
+        ? 'Download your database from the remote server to replace the local copy. A backup will be created.'
+        : `Download "${username}"'s database from the remote server. A backup of your local copy will be created.`;
+    const ok = await appConfirm(msg, 'Pull Database');
+    if (!ok) return;
+
+    showProgress('Downloading database...');
+    try {
+        const body = {};
+        if (isAdmin && username !== currentUser) body.target_user = username;
+        const response = await apiCall('/api/sync/pull-mine', { method: 'POST', body });
+        const result = await response.json();
+        showToast(result.success ? result.message : (result.error || 'Pull failed.'), result.success ? 'success' : 'danger');
+        refreshList();
+    } catch (err) {
+        showToast('Pull failed: ' + err.message, 'danger');
+    } finally {
+        hideProgress();
+    }
+}
+
+async function doDelete(username) {
+    const ok = await appConfirm(
+        `This will permanently delete "${username}"'s database from the remote server. This cannot be undone.`,
+        'Delete Remote Database'
+    );
+    if (!ok) return;
+
+    try {
+        const response = await apiCall(`/api/sync/admin/delete/${encodeURIComponent(username)}`, { method: 'DELETE' });
+        const result = await response.json();
+        showToast(result.success ? result.message : result.error, result.success ? 'success' : 'danger');
+        refreshList();
+    } catch (err) {
+        showToast('Delete failed: ' + err.message, 'danger');
+    }
+}
+
+function showProgress(text) {
+    document.getElementById('syncProgress').style.display = 'block';
+    document.getElementById('syncStatusText').textContent = text;
+}
+function hideProgress() {
+    document.getElementById('syncProgress').style.display = 'none';
+}
+</script>
+{% endblock %}

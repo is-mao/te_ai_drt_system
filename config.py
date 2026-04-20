@@ -31,9 +31,7 @@ class Config:
         PG_USER = os.environ.get("DRT_PG_USER", "")
         PG_PASSWORD = os.environ.get("DRT_PG_PASSWORD", "")
         PG_DB = os.environ.get("DRT_PG_DB", "ai_drt_system")
-        SQLALCHEMY_DATABASE_URI = (
-            f"postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DB}"
-        )
+        SQLALCHEMY_DATABASE_URI = f"postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DB}"
     else:
         SQLALCHEMY_DATABASE_URI = "sqlite:///" + os.path.join(BASE_DIR, "drt_system.db")
 
@@ -43,7 +41,19 @@ class Config:
     PERMANENT_SESSION_LIFETIME = 28800  # 8 hours
 
     # Defect class options
-    DEFECT_CLASSES = ["CND", "Equipment", "HARDWARE", "INTERCONNECT", "NPF", "OPERATOR_PROCESS", "ORDER", "R&R", "SOFTWARE", "TBD", "TEST"]
+    DEFECT_CLASSES = [
+        "CND",
+        "Equipment",
+        "HARDWARE",
+        "INTERCONNECT",
+        "NPF",
+        "OPERATOR_PROCESS",
+        "ORDER",
+        "R&R",
+        "SOFTWARE",
+        "TBD",
+        "TEST",
+    ]
 
     # Defect class → value → definition mapping (from Excel)
     DEFECT_CLASS_VALUE_MAP = {
@@ -216,9 +226,7 @@ class Config:
     }
 
     # Flat list of all defect values (for backward compatibility)
-    DEFECT_VALUES = sorted(set(
-        v for values in DEFECT_CLASS_VALUE_MAP.values() for v in values.keys()
-    ))
+    DEFECT_VALUES = sorted(set(v for values in DEFECT_CLASS_VALUE_MAP.values() for v in values.keys()))
 
     # BU options
     BU_OPTIONS = ["CRBU", "WNBU", "SRGBU", "UABU", "CSPBU"]

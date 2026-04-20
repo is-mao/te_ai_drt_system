@@ -30,6 +30,7 @@ def create_app():
     from routes.import_export import import_export_bp
     from routes.ai_analysis import ai_bp
     from routes.settings import settings_bp
+    from routes.sync import sync_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(defects_bp)
@@ -37,6 +38,7 @@ def create_app():
     app.register_blueprint(import_export_bp)
     app.register_blueprint(ai_bp)
     app.register_blueprint(settings_bp)
+    app.register_blueprint(sync_bp)
 
     @app.route("/")
     def index():
@@ -86,20 +88,64 @@ def _migrate_columns(app):
                         conn.execute(text(f"ALTER TABLE defect_reports ADD COLUMN {col_name} {col_type} NULL"))
                     conn.commit()
                     app.logger.info(f"Added missing column: {col_name}")
+
+            # Also migrate users table
+            try:
+                user_cols = {col["name"] for col in inspector.get_columns("users")}
+                if "email" not in user_cols:
+                    if dialect == "sqlite":
+                        conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(128)"))
+                    else:
+                        conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(128) NULL"))
+                    conn.commit()
+                    app.logger.info("Added missing column: email (users)")
+            except Exception as e:
+                app.logger.warning(f"Users table migration skipped: {e}")
     except Exception as e:
         app.logger.warning(f"Column migration skipped: {e}")
+
+
+# Default user accounts: (username, email, role)
+_DEFAULT_USERS = [
+    ("admin", None, "admin"),
+    ("antzhou", "antzhou@cisco.com", "user"),
+    ("bhu3", "bhu3@cisco.com", "user"),
+    ("caspliu", "caspliu@cisco.com", "user"),
+    ("easli", "easli@cisco.com", "user"),
+    ("edwinxie", "edwinxie@cisco.com", "user"),
+    ("fexiang", "fexiang@cisco.com", "user"),
+    ("hauta", "hauta@cisco.com", "user"),
+    ("huasyin", "huasyin@cisco.com", "user"),
+    ("junmtan", "junmtan@cisco.com", "user"),
+    ("kinyleun", "kinyleun@cisco.com", "user"),
+    ("macsu", "macsu@cisco.com", "user"),
+    ("nvuquynh", "nvuquynh@cisco.com", "user"),
+    ("shuyoluo", "shuyoluo@cisco.com", "user"),
+    ("skhu2", "skhu2@cisco.com", "user"),
+    ("ttracyng", "ttracyng@cisco.com", "user"),
+    ("tongyu", "tongyu@cisco.com", "user"),
+    ("vjohnngu", "vjohnngu@cisco.com", "user"),
+    ("wespeng", "wespeng@cisco.com", "user"),
+    ("yujiwan", "yujiwan@cisco.com", "user"),
+    ("zhiqxie", "zhiqxie@cisco.com", "user"),
+    ("ismao", "ismao@cisco.com", "admin"),
+]
 
 
 def _seed_defaults():
     from models.user import User
     from models.system_config import SystemConfig
 
-    # Seed default admin if no users exist
-    if User.query.count() == 0:
-        admin = User(username="admin", role="admin")
-        admin.set_password("admin123")
-        db.session.add(admin)
-        db.session.commit()
+    # Seed default users if they don't exist
+    for username, email, role in _DEFAULT_USERS:
+        if not User.query.filter_by(username=username).first():
+            user = User(username=username, email=email, role=role)
+            if username == "admin":
+                user.set_password("admin123@@")
+            else:
+                user.set_password(f"{username}123")
+            db.session.add(user)
+    db.session.commit()
 
     # Seed default config
     if not db.session.get(SystemConfig, "gemini_api_key"):

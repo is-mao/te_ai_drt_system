@@ -18,7 +18,7 @@ keepalive = 5
 
 # Logging
 accesslog = "-"  # stdout
-errorlog = "-"   # stderr
+errorlog = "-"  # stderr
 loglevel = os.environ.get("LOG_LEVEL", "info")
 
 # Security: limit request sizes

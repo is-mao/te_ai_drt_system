@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}View {{ owner }}'s Data - AI DRT System{% endblock %}
+
+{% block content %}
+<div class="settings-section">
+    <!-- Page Header -->
+    <div class="page-header">
+        <div>
+            <h4>
+                <i class="bi bi-database me-2" style="color: var(--primary);"></i>
+                <span class="text-muted">Read-Only:</span> {{ owner }}'s Database
+            </h4>
+            <div class="page-subtitle">
+                <span class="badge bg-warning text-dark"><i class="bi bi-lock me-1"></i>Read-Only Mode</span>
+                You cannot modify this data.
+            </div>
+        </div>
+        <div>
+            <a href="/sync" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Sync
+            </a>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-6">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="searchInput" placeholder="Search failure, SN, root cause...">
+                        <button class="btn btn-outline-secondary" onclick="loadRecords(1)">Search</button>
+                    </div>
+                </div>
+                <div class="col-md-6 text-end">
+                    <span class="text-muted small" id="recordsInfo">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Records Table -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="recordsTable">
+                    <thead>
+                        <tr>
+                            <th style="width:50px">ID</th>
+                            <th>BU</th>
+                            <th>Station</th>
+                            <th>SN</th>
+                            <th>Defect Class</th>
+                            <th>Failure</th>
+                            <th>Root Cause</th>
+                            <th>Record Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsBody">
+                        <tr><td colspan="8" class="text-center py-4 text-muted">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="d-flex justify-content-center mt-3" id="paginationContainer"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const OWNER = '{{ owner }}';
+let currentPage = 1;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadRecords(1);
+
+    document.getElementById('searchInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') loadRecords(1);
+    });
+});
+
+async function loadRecords(page) {
+    currentPage = page;
+    const search = document.getElementById('searchInput').value.trim();
+    const params = new URLSearchParams({ page, per_page: 50 });
+    if (search) params.set('search', search);
+
+    const tbody = document.getElementById('recordsBody');
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div> Loading...</td></tr>';
+
+    try {
+        const response = await apiCall(`/api/sync/readonly/${encodeURIComponent(OWNER)}/records?${params}`);
+        const data = await response.json();
+
+        if (!data.success) {
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">${escapeHtml(data.error)}</td></tr>`;
+            return;
+        }
+
+        document.getElementById('recordsInfo').textContent =
+            `${data.total} records | Page ${data.page} of ${data.pages}`;
+
+        if (data.records.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No records found.</td></tr>';
+            renderPagination(0, 0, 0);
+            return;
+        }
+
+        let html = '';
+        data.records.forEach(r => {
+            html += `<tr>
+                <td>${r.id}</td>
+                <td>${r.bu ? buBadge(r.bu) : '-'}</td>
+                <td>${escapeHtml(r.station) || '-'}</td>
+                <td><code>${escapeHtml(r.sn) || '-'}</code></td>
+                <td>${defectClassBadge(r.defect_class)}</td>
+                <td title="${escapeHtml(r.failure)}">${truncate(r.failure, 40)}</td>
+                <td title="${escapeHtml(r.root_cause)}">${truncate(r.root_cause, 40)}</td>
+                <td class="text-muted small">${r.record_time || '-'}</td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+        renderPagination(data.page, data.pages, data.total);
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">Error: ${err.message}</td></tr>`;
+    }
+}
+
+function renderPagination(page, pages, total) {
+    const container = document.getElementById('paginationContainer');
+    if (pages <= 1) { container.innerHTML = ''; return; }
+
+    let html = '<nav><ul class="pagination pagination-sm">';
+    html += `<li class="page-item ${page <= 1 ? 'disabled' : ''}">
+        <a class="page-link" href="#" onclick="loadRecords(${page - 1}); return false;">&laquo;</a></li>`;
+
+    const start = Math.max(1, page - 2);
+    const end = Math.min(pages, page + 2);
+    for (let i = start; i <= end; i++) {
+        html += `<li class="page-item ${i === page ? 'active' : ''}">
+            <a class="page-link" href="#" onclick="loadRecords(${i}); return false;">${i}</a></li>`;
+    }
+
+    html += `<li class="page-item ${page >= pages ? 'disabled' : ''}">
+        <a class="page-link" href="#" onclick="loadRecords(${page + 1}); return false;">&raquo;</a></li>`;
+    html += '</ul></nav>';
+    container.innerHTML = html;
+}
+</script>
+{% endblock %}
