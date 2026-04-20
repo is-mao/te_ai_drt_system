@@ -224,10 +224,36 @@ async function doPush(username) {
 }
 
 async function doPull(username) {
+    // Step 1: Warn about overwriting local data and offer to push first
+    const pushFirst = await appConfirm(
+        'Pull will overwrite your local database with the remote copy.\n\nDo you want to Push your local data first to avoid losing any changes?',
+        'Push Before Pull?'
+    );
+    if (pushFirst) {
+        showProgress('Pushing local database first...');
+        try {
+            const pushResp = await apiCall('/api/sync/push', { method: 'POST', body: {} });
+            const pushResult = await pushResp.json();
+            if (pushResult.success) {
+                showToast('Local data pushed successfully. Now pulling...', 'success');
+            } else {
+                showToast('Push failed: ' + (pushResult.error || 'Unknown error'), 'danger');
+                hideProgress();
+                return;
+            }
+        } catch (err) {
+            showToast('Push failed: ' + err.message, 'danger');
+            hideProgress();
+            return;
+        }
+        hideProgress();
+    }
+
+    // Step 2: Confirm pull
     const msg = username === currentUser
         ? 'Download your database from the remote server to replace the local copy. A backup will be created.'
         : `Download "${username}"'s database from the remote server. A backup of your local copy will be created.`;
-    const ok = await appConfirm(msg, 'Pull Database');
+    const ok = await appConfirm(msg, 'Confirm Pull');
     if (!ok) return;
 
     showProgress('Downloading database...');
