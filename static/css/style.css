@@ -466,6 +466,22 @@ textarea.log-textarea {
     line-height: 1.5;
 }
 
+/* Log clear button */
+.log-clear-btn {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    padding: 0.15rem 0.5rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition);
+}
+
+.log-clear-btn:hover {
+    color: var(--danger);
+    background: rgba(207, 32, 48, 0.08);
+    border-color: rgba(207, 32, 48, 0.2);
+}
+
 /* ---- Log Display ---- */
 .log-display {
     background-color: #1e1e1e;
@@ -775,6 +791,86 @@ textarea.log-textarea {
 .history-section .card-title {
     color: var(--accent);
     font-weight: 700;
+}
+
+.beautify-section {
+    background: linear-gradient(135deg, #f3e8ff 0%, #ede7f6 100%);
+    border: 1px solid #d1c4e9;
+    border-radius: var(--radius-md);
+}
+
+.beautify-section .card-title {
+    color: var(--purple);
+    font-weight: 700;
+}
+
+.translate-section {
+    background: linear-gradient(135deg, var(--accent-light) 0%, #e1f5fe 100%);
+    border: 1px solid #b3e5fc;
+    border-radius: var(--radius-md);
+}
+
+.translate-section .card-title {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+/* Translate language buttons */
+.translate-lang-btn.btn-zh {
+    background: var(--primary);
+    color: #fff;
+    border: none;
+}
+
+.translate-lang-btn.btn-zh:hover {
+    background: var(--primary-dark);
+    box-shadow: 0 2px 8px rgba(4, 159, 217, 0.3);
+}
+
+.translate-lang-btn.btn-vi {
+    background: #00796b;
+    color: #fff;
+    border: none;
+}
+
+.translate-lang-btn.btn-vi:hover {
+    background: #004d40;
+    box-shadow: 0 2px 8px rgba(0, 121, 107, 0.3);
+}
+
+/* Translate/Beautify result cards */
+.translate-result-card {
+    border-left: 4px solid var(--primary);
+    background: #e1f5fe;
+}
+
+.beautify-result-card {
+    border-left: 4px solid var(--purple);
+    background: var(--purple-light);
+}
+
+/* AI Tools section divider */
+.ai-tools-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
+.ai-tools-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--gray-300), transparent);
+}
+
+.ai-tools-divider span {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
 /* ---- Detail Info Table ---- */

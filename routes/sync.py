@@ -161,6 +161,8 @@ def api_manifest():
                     "version": info.get("version"),
                     "updated_at": info.get("updated_at"),
                     "file_hash": info.get("file_hash", "")[:12],
+                    "file_name": f"{username}.db",
+                    "file_path": f"{DEFAULT_REMOTE_BASE}/{username}.db",
                 }
             )
         return jsonify({"success": True, "users": users})

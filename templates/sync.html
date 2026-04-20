@@ -115,12 +115,13 @@ async function loadManifest() {
         const data = await response.json();
 
         if (!data.success || !data.users || data.users.length === 0) {
-            container.innerHTML = '<div class="sync-empty"><i class="bi bi-cloud-slash"></i><p>No databases on remote server.<br>Push your data first.</p></div>';
+            container.innerHTML = '<div class="sync-empty"><i class="bi bi-cloud-slash"></i><p>No databases on remote server.<br>Push your data first.</p>'
+                + '<button class="btn btn-primary btn-sm mt-2" onclick="doPush(\'' + escapeHtml(currentUser) + '\')"><i class="bi bi-cloud-arrow-up me-1"></i>Push My Database</button></div>';
             return;
         }
 
         let html = '<div class="table-responsive"><table class="table table-hover align-middle sync-table mb-0">';
-        html += '<thead><tr><th>User</th><th>Version</th><th>Last Updated</th><th>Hash</th><th class="text-end">Actions</th></tr></thead><tbody>';
+        html += '<thead><tr><th>User</th><th>Version</th><th>Last Updated</th><th>File</th><th>Remote Path</th><th class="text-end">Actions</th></tr></thead><tbody>';
 
         data.users.forEach(u => {
             html += `<tr>
@@ -129,7 +130,8 @@ async function loadManifest() {
                 </div></td>
                 <td><span class="badge bg-secondary">v${u.version}</span></td>
                 <td class="text-muted small">${escapeHtml(u.updated_at || '-')}</td>
-                <td class="text-muted small font-monospace hash-cell" title="${escapeHtml(u.file_hash || '')}">${escapeHtml(u.file_hash || '-')}</td>
+                <td class="small font-monospace">${escapeHtml(u.file_name || '-')}</td>
+                <td class="text-muted small font-monospace hash-cell" title="${escapeHtml(u.file_path || '')}">${escapeHtml(u.file_path || '-')}</td>
                 <td class="text-end text-nowrap">
                     <button class="btn btn-outline-primary btn-sm sync-action-btn me-1" onclick="doPush('${escapeHtml(u.username)}')" title="Push to remote">
                         <i class="bi bi-cloud-arrow-up"></i>

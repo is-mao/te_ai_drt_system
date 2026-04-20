@@ -59,7 +59,12 @@
             </div>
             <div class="col-auto">
                 <label class="form-label mb-0">Station</label>
-                <input type="text" id="filterStation" class="form-control form-control-sm" style="width:160px;" placeholder="Station">
+                <select id="filterStation" class="form-select form-select-sm" style="width:110px;">
+                    <option value="">All</option>
+                    {% for st in station_options %}
+                    <option value="{{ st }}">{{ st }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-auto">
                 <label class="form-label mb-0">Date From</label>

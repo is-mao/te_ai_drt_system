@@ -22,11 +22,20 @@ BU_OPTIONS = Config.BU_OPTIONS
 @defects_bp.route("/defects")
 @login_required
 def defect_list():
+    station_options = (
+        db.session.query(DefectReport.station)
+        .filter(DefectReport.station.isnot(None), DefectReport.station != "")
+        .distinct()
+        .order_by(DefectReport.station)
+        .all()
+    )
+    stations = [s[0] for s in station_options]
     return render_template(
         "defect_list.html",
         defect_classes=DEFECT_CLASSES,
         defect_values=DEFECT_VALUES,
         bu_options=BU_OPTIONS,
+        station_options=stations,
     )
 
 
