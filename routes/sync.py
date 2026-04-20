@@ -101,6 +101,12 @@ def api_pull_mine():
             app_root=BASE_DIR,
             app_username=app_username,
         )
+        # After replacing the DB file, dispose SQLAlchemy engine pool
+        # so subsequent queries use the new file
+        if result.get("success"):
+            from models import db as _db
+
+            _db.engine.dispose()
         return jsonify(result)
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
