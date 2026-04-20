@@ -4,18 +4,18 @@
 
 /* ---- Design Tokens ---- */
 :root {
-    --primary-dark: #1a237e;
-    --primary: #283593;
-    --primary-light: #3949ab;
-    --primary-lighter: #5c6bc0;
-    --primary-surface: #e8eaf6;
-    --accent: #1565c0;
-    --accent-light: #e3f2fd;
-    --success: #2e7d32;
-    --success-light: #e8f5e9;
-    --warning: #f57f17;
+    --primary-dark: #005073;
+    --primary: #049fd9;
+    --primary-light: #00bceb;
+    --primary-lighter: #58d3f7;
+    --primary-surface: #e5f6fd;
+    --accent: #6cc04a;
+    --accent-light: #eaf7e3;
+    --success: #6cc04a;
+    --success-light: #eaf7e3;
+    --warning: #ffbf00;
     --warning-light: #fff8e1;
-    --danger: #c62828;
+    --danger: #cf2030;
     --danger-light: #fce4ec;
     --purple: #6f42c1;
     --purple-light: #f3e8ff;
@@ -57,7 +57,7 @@ body {
     left: 0;
     right: 0;
     height: 50px;
-    background: linear-gradient(90deg, #0d1442 0%, #1a237e 50%, #283593 100%);
+    background: linear-gradient(90deg, #003d57 0%, #005073 50%, #049fd9 100%);
     z-index: 1040;
     display: flex;
     align-items: center;
@@ -261,7 +261,7 @@ body {
 .filter-card .form-control:focus,
 .filter-card .form-select:focus {
     border-color: var(--primary-lighter);
-    box-shadow: 0 0 0 3px rgba(92, 107, 192, 0.15);
+    box-shadow: 0 0 0 3px rgba(4, 159, 217, 0.15);
 }
 
 /* ---- Tables ---- */
@@ -398,7 +398,7 @@ body {
 .btn-primary:hover {
     background-color: var(--primary-dark);
     border-color: var(--primary-dark);
-    box-shadow: 0 2px 8px rgba(26, 35, 126, 0.25);
+    box-shadow: 0 2px 8px rgba(4, 159, 217, 0.3);
 }
 
 .btn-success {
@@ -449,7 +449,7 @@ body {
 .form-control:focus,
 .form-select:focus {
     border-color: var(--primary-lighter);
-    box-shadow: 0 0 0 3px rgba(92, 107, 192, 0.15);
+    box-shadow: 0 0 0 3px rgba(4, 159, 217, 0.15);
 }
 
 .form-text {
@@ -582,7 +582,7 @@ textarea.log-textarea {
 .log-drop-zone .drop-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(21, 101, 192, 0.1);
+    background: rgba(4, 159, 217, 0.1);
     border: 2px dashed var(--accent);
     border-radius: var(--radius-sm);
     display: flex;
