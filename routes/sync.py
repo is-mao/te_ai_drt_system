@@ -133,6 +133,22 @@ def api_readonly_list():
     return jsonify({"success": True, "databases": databases})
 
 
+@sync_bp.route("/api/sync/clear-local", methods=["POST"])
+@login_required
+def api_clear_local():
+    """Clear all records from the local database."""
+    from models.defect_report import DefectReport
+    from models import db
+
+    try:
+        count = DefectReport.query.delete()
+        db.session.commit()
+        return jsonify({"success": True, "deleted": count, "message": f"Cleared {count} local record(s). You can now Pull your data from the remote server."})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @sync_bp.route("/api/sync/readonly/<username>/records", methods=["GET"])
 @login_required
 def api_readonly_records(username):

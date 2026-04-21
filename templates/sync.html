@@ -11,6 +11,9 @@
             <div class="page-subtitle">Sync databases with remote server</div>
         </div>
         <div class="d-flex gap-2">
+            <button class="btn btn-outline-danger btn-sm" onclick="doClearLocal()">
+                <i class="bi bi-trash me-1"></i>Clear Local Data
+            </button>
             <button class="btn btn-outline-info btn-sm" onclick="testConnection()">
                 <i class="bi bi-plug me-1"></i>Test Connection
             </button>
@@ -203,6 +206,31 @@ async function testConnection() {
     }
 }
 
+async function doClearLocal() {
+    const ok = await appConfirm(
+        'This will delete ALL records in the local database (defects, pending, merged data). Remote data is NOT affected.\n\nYou can Pull your data back from the remote server afterwards.\n\nContinue?',
+        'Clear Local Database'
+    );
+    if (!ok) return;
+
+    showProgress('Clearing local database...');
+    try {
+        const response = await apiCall('/api/sync/clear-local', { method: 'POST', body: {} });
+        const result = await response.json();
+        showToast(result.success ? result.message : (result.error || 'Clear failed.'), result.success ? 'success' : 'danger');
+        if (result.success) {
+            await new Promise(r => setTimeout(r, 300));
+            refreshList();
+            loadMergeList();
+            loadMergedUsers();
+        }
+    } catch (err) {
+        showToast('Clear failed: ' + err.message, 'danger');
+    } finally {
+        hideProgress();
+    }
+}
+
 async function doPush(username) {
     const msg = username === currentUser
         ? 'Upload your local database to the remote server, overwriting your previous remote copy.'
@@ -239,6 +267,10 @@ async function doPull(username) {
         const response = await apiCall('/api/sync/pull-mine', { method: 'POST', body });
         const result = await response.json();
         showToast(result.success ? result.message : (result.error || 'Pull failed.'), result.success ? 'success' : 'danger');
+        if (result.success) {
+            // Brief delay to let DB engine reconnect after dispose
+            await new Promise(r => setTimeout(r, 500));
+        }
         refreshList();
     } catch (err) {
         showToast('Pull failed: ' + err.message, 'danger');

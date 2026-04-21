@@ -213,10 +213,15 @@
             btn.addEventListener('click', async function () {
                 if (!await appConfirm('Delete this pending record?', 'Delete')) return;
                 try {
-                    await fetch('/api/draft-records/' + btn.dataset.id, { method: 'DELETE' });
-                    showToast('Deleted', 'success');
-                    loadDrafts();
-                    updatePendingBadge();
+                    var resp = await fetch('/api/draft-records/' + btn.dataset.id, { method: 'DELETE' });
+                    var result = await resp.json();
+                    if (result.success) {
+                        showToast('Deleted', 'success');
+                        loadDrafts();
+                        updatePendingBadge();
+                    } else {
+                        showToast(result.error || 'Delete failed', 'danger');
+                    }
                 } catch (err) { showToast('Delete failed', 'danger'); }
             });
         });
@@ -274,6 +279,8 @@
             var result = await resp.json();
             if (result.success) {
                 showToast('Deleted ' + result.deleted + ' record(s)', 'success');
+                document.getElementById('selectAllDrafts').checked = false;
+                document.getElementById('batchDeleteBtn').classList.add('d-none');
                 loadDrafts();
                 updatePendingBadge();
             } else {

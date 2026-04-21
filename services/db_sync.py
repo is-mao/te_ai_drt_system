@@ -179,7 +179,34 @@ def push_database(
     if not local_db.exists():
         return {"success": False, "error": "Local database not found."}
 
-    local_hash = _file_hash(local_db)
+    # Create a clean copy excluding other users' merged records
+    import tempfile
+
+    clean_db = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
+    clean_db.close()
+    shutil.copy2(local_db, clean_db.name)
+    try:
+        conn = sqlite3.connect(clean_db.name)
+        # Remove records owned by other users (merged data)
+        try:
+            conn.execute(
+                "DELETE FROM defect_reports WHERE owner IS NOT NULL AND owner != '' AND owner != ?",
+                (app_username,),
+            )
+            # Clear owner tag on own records so they are clean
+            conn.execute(
+                "UPDATE defect_reports SET owner = '' WHERE owner = ?",
+                (app_username,),
+            )
+            conn.commit()
+        except Exception:
+            pass  # owner column may not exist in older DBs
+        conn.execute("VACUUM")
+        conn.close()
+    except Exception:
+        pass
+
+    local_hash = _file_hash(Path(clean_db.name))
     remote_base = DEFAULT_REMOTE_BASE
     remote_db_path = f"{remote_base}/{app_username}.db"
     manifest_path = f"{remote_base}/manifest.json"
@@ -196,7 +223,7 @@ def push_database(
 
         # Upload (atomic: write to .tmp then rename)
         tmp_remote = f"{remote_db_path}.tmp"
-        sftp.put(str(local_db), tmp_remote)
+        sftp.put(clean_db.name, tmp_remote)
         # Rename is atomic on most POSIX systems
         try:
             sftp.remove(remote_db_path)
@@ -230,6 +257,12 @@ def push_database(
         if len(sync_log) > 500:
             sync_log = sync_log[-500:]
         _write_remote_json(sftp, sync_log_path, sync_log)
+
+    # Clean up temp file
+    try:
+        os.unlink(clean_db.name)
+    except Exception:
+        pass
 
     return {
         "success": True,
