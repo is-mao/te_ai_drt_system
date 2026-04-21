@@ -7,7 +7,7 @@ from services.failure_dict import lookup_failure
 from services.historical_search import search_similar_failures
 
 # Models to try in order (fallback if quota exhausted on one)
-GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+GEMINI_MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]
 
 # Retry config (like stock_analysis)
 MAX_RETRIES = 2
@@ -346,15 +346,25 @@ def _call_gemini(api_key, log_content, failure, defect_class, station, bu, keywo
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()
-                if any(k in err_str for k in ("quota", "resource_exhausted", "429", "503", "unavailable", "overloaded", "high demand")):
-                    print(f"Model {model_name} unavailable ({type(e).__name__}), trying next model...")
+                # Quota exhausted (429) — no point retrying, skip to next model/key
+                if any(k in err_str for k in ("quota", "resource_exhausted", "429")):
+                    print(f"Model {model_name} quota exhausted, trying next model...")
+                    continue
+                # Transient server error (503) — worth retrying after delay
+                if any(k in err_str for k in ("503", "unavailable", "overloaded", "high demand")):
+                    print(f"Model {model_name} temporarily unavailable, trying next model...")
                     continue
                 raise
 
-        # All models exhausted for this attempt — parse retry delay from error or use default
+        # Check if error was quota (don't retry) vs transient (retry with delay)
+        last_err_str = str(last_error).lower()
+        if any(k in last_err_str for k in ("quota", "resource_exhausted", "429")):
+            # Quota won't reset in seconds, no point waiting
+            break
+
         if attempt < MAX_RETRIES:
             delay = _parse_retry_delay(str(last_error)) or RETRY_DELAY
-            print(f"All models rate-limited. Waiting {delay}s before retry {attempt + 2}/{MAX_RETRIES + 1}...")
+            print(f"All models unavailable. Waiting {delay}s before retry {attempt + 2}/{MAX_RETRIES + 1}...")
             time.sleep(delay)
 
     raise last_error
