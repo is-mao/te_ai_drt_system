@@ -50,13 +50,65 @@
                         <div class="card-body">
                             <h6 class="fw-bold mb-2"><i class="bi bi-diagram-3 me-1"></i>AI Analysis Fallback Chain</h6>
                             <ol class="small mb-0 ps-3">
-                                <li class="mb-1"><strong>Google Gemini AI</strong> — Primary (requires API key)</li>
+                                <li class="mb-1"><strong>CIRCUIT API</strong> — Primary (AppKey + Access Token)</li>
+                                <li class="mb-1"><strong>Google Gemini AI</strong> — Secondary (requires API key)</li>
                                 <li class="mb-1"><strong>Historical Search</strong> — Search similar failures in database</li>
                                 <li class="mb-1"><strong>Failure Dictionary</strong> — Built-in pattern matching</li>
                                 <li><strong>Manual Input</strong> — User enters root cause</li>
                             </ol>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CIRCUIT API Configuration -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>
+                <i class="bi bi-cpu me-2"></i>
+                CIRCUIT API Keys
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="mb-3">
+                        <label class="form-label">CIRCUIT Endpoint</label>
+                        <input type="text" class="form-control" id="circuitEndpoint" placeholder="https://.../chat/completions">
+                        <div class="form-text">Default endpoint (modifiable if needed)</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">AppKey</label>
+                        <input type="text" class="form-control" id="circuitAppKey" placeholder="Enter CIRCUIT AppKey">
+                        <div class="form-text">Default AppKey (modifiable if needed)</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Access Token</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="circuitAccessToken" placeholder="Enter CIRCUIT OAuth access token">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleCircuitToken">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">Token usually expires in about 1 hour. Update when expired.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Preferred Model</label>
+                        <input type="text" class="form-control" id="circuitModel" placeholder="gemini-3.1-flash-lite">
+                        <div class="form-text">Default model (modifiable if needed)</div>
+                    </div>
+                    <div id="circuitInfo" class="mb-3" style="display:none;">
+                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>CIRCUIT Configured</span>
+                        <div class="small text-muted mt-1" id="circuitMasked"></div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary btn-sm" id="saveCircuit"><i class="bi bi-save me-1"></i>Save CIRCUIT</button>
+                        <button class="btn btn-outline-info btn-sm" id="testCircuit"><i class="bi bi-plug me-1"></i>Test CIRCUIT</button>
+                        <button class="btn btn-outline-danger btn-sm" id="clearCircuit"><i class="bi bi-x-lg me-1"></i>Clear CIRCUIT</button>
+                    </div>
+                    <div id="circuitResult" class="mt-3" style="display:none;"></div>
                 </div>
             </div>
         </div>
@@ -88,6 +140,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     loadAISettings();
+    loadCircuitSettings();
 
     document.getElementById('toggleKey').addEventListener('click', function() {
         const input = document.getElementById('apiKey');
@@ -159,6 +212,97 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Clear key failed:', err);
         }
     });
+
+    function bindToggle(btnId, inputId) {
+        document.getElementById(btnId).addEventListener('click', function() {
+            const input = document.getElementById(inputId);
+            const icon = this.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'bi bi-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'bi bi-eye';
+            }
+        });
+    }
+    bindToggle('toggleCircuitToken', 'circuitAccessToken');
+
+    document.getElementById('saveCircuit').addEventListener('click', function() {
+        const endpoint = document.getElementById('circuitEndpoint').value.trim();
+        const app_key = document.getElementById('circuitAppKey').value.trim();
+        const access_token = document.getElementById('circuitAccessToken').value.trim();
+        const model = document.getElementById('circuitModel').value.trim();
+
+        if (!access_token) {
+            showToast('Please enter an Access Token', 'warning');
+            return;
+        }
+
+        fetch('/api/settings/circuit', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({endpoint, app_key, access_token, model})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast('CIRCUIT settings saved', 'success');
+                document.getElementById('circuitAccessToken').value = '';
+                loadCircuitSettings();
+            } else {
+                showToast(data.error || 'Failed to save CIRCUIT settings', 'danger');
+            }
+        });
+    });
+
+    document.getElementById('testCircuit').addEventListener('click', function() {
+        const resultDiv = document.getElementById('circuitResult');
+        const endpoint = document.getElementById('circuitEndpoint').value.trim();
+        const app_key = document.getElementById('circuitAppKey').value.trim();
+        const access_token = document.getElementById('circuitAccessToken').value.trim();
+        const model = document.getElementById('circuitModel').value.trim();
+
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Testing CIRCUIT...';
+
+        fetch('/api/settings/circuit/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({endpoint, app_key, access_token, model})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                resultDiv.innerHTML = '<div class="alert alert-success py-2 mb-0">Connected successfully: ' + data.message + '</div>';
+            } else {
+                resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0">Connection failed: ' + data.message + '</div>';
+            }
+        });
+    });
+
+    document.getElementById('clearCircuit').addEventListener('click', async function() {
+        if (!await appConfirm('Are you sure you want to clear CIRCUIT settings?', 'Clear CIRCUIT')) return;
+        try {
+            const resp = await fetch('/api/settings/circuit', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({clear: true})
+            });
+            const data = await resp.json();
+            if (data.success) {
+                document.getElementById('circuitEndpoint').value = '';
+                document.getElementById('circuitAppKey').value = '';
+                document.getElementById('circuitAccessToken').value = '';
+                document.getElementById('circuitModel').value = '';
+                document.getElementById('circuitResult').style.display = 'none';
+                showToast('CIRCUIT settings cleared', 'success');
+                loadCircuitSettings();
+            }
+        } catch (err) {
+            console.error('Clear circuit failed:', err);
+        }
+    });
 });
 
 function loadAISettings() {
@@ -169,6 +313,24 @@ function loadAISettings() {
         if (data.has_key) {
             info.style.display = 'block';
             document.getElementById('maskedKey').textContent = data.masked_key;
+        } else {
+            info.style.display = 'none';
+        }
+    });
+}
+
+function loadCircuitSettings() {
+    fetch('/api/settings/circuit')
+    .then(r => r.json())
+    .then(data => {
+        const info = document.getElementById('circuitInfo');
+        document.getElementById('circuitEndpoint').value = data.endpoint || '';
+        document.getElementById('circuitAppKey').value = data.app_key || '';
+        document.getElementById('circuitModel').value = data.model || '';
+        if (data.has_config) {
+            info.style.display = 'block';
+            document.getElementById('circuitMasked').textContent =
+                'AppKey: ' + (data.masked_app_key || '') + ' | Access Token: ' + (data.masked_access_token || '');
         } else {
             info.style.display = 'none';
         }

@@ -5,6 +5,10 @@ from datetime import datetime
 # Mapping of config keys to environment variable names
 _ENV_FALLBACK = {
     "gemini_api_key": "GEMINI_API_KEY",
+    "circuit_api_endpoint": "CIRCUIT_API_ENDPOINT",
+    "circuit_app_key": "CIRCUIT_APP_KEY",
+    "circuit_access_token": "CIRCUIT_ACCESS_TOKEN",
+    "circuit_model": "CIRCUIT_MODEL",
 }
 
 

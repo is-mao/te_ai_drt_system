@@ -2,12 +2,15 @@ import os
 import re
 import time
 import traceback
+import json
+from urllib import request, error
 from models.system_config import SystemConfig
 from services.failure_dict import lookup_failure
 from services.historical_search import search_similar_failures
 
 # Models to try in order (fallback if quota exhausted on one)
 GEMINI_MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]
+CIRCUIT_DEFAULT_MODELS = ["gemini-3.1-flash-lite", "gpt-5-nano"]
 
 # Retry config (like stock_analysis)
 MAX_RETRIES = 2
@@ -30,14 +33,102 @@ def _get_api_keys():
     return keys
 
 
+def _get_circuit_config():
+    """Read CIRCUIT API config from DB/env fallback."""
+    endpoint = (SystemConfig.get_value("circuit_api_endpoint") or "").strip()
+    app_key = (SystemConfig.get_value("circuit_app_key") or "").strip()
+    access_token = (SystemConfig.get_value("circuit_access_token") or "").strip()
+    model = (SystemConfig.get_value("circuit_model") or "").strip()
+    if not model:
+        model = CIRCUIT_DEFAULT_MODELS[0]
+    return {
+        "endpoint": endpoint,
+        "app_key": app_key,
+        "access_token": access_token,
+        "model": model,
+        "enabled": bool(endpoint and app_key and access_token),
+    }
+
+
+def _call_circuit_api(circuit_cfg, prompt, model=None):
+    """Call CIRCUIT API using correct Cisco CIRCUIT format (api-key auth + user field with appkey)."""
+    endpoint = circuit_cfg["endpoint"]
+    app_key = circuit_cfg["app_key"]
+    access_token = circuit_cfg["access_token"]
+    use_model = (model or circuit_cfg.get("model") or "").strip() or CIRCUIT_DEFAULT_MODELS[0]
+
+    # Support template endpoints like .../deployments/{MODEL_NAME}/chat/completions?api-version=...
+    endpoint = endpoint.replace("{MODEL_NAME}", use_model).replace("{model_name}", use_model)
+
+    # CIRCUIT-specific payload: user field contains appkey as JSON string
+    payload = {
+        "user": json.dumps({"appkey": app_key}),
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+    req = request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "api-key": access_token,  # CIRCUIT uses api-key header, not Authorization: Bearer
+        },
+    )
+
+    try:
+        with request.urlopen(req, timeout=45) as resp:
+            body = resp.read().decode("utf-8")
+            data = json.loads(body)
+    except error.HTTPError as e:
+        err_body = ""
+        try:
+            err_body = e.read().decode("utf-8")
+        except Exception:
+            pass
+        raise RuntimeError(f"HTTP {e.code}: {err_body or e.reason}")
+    except error.URLError as e:
+        raise RuntimeError(f"Network error: {e.reason}")
+
+    # Parse CIRCUIT response (OpenAI format: choices is a list)
+    if isinstance(data, dict):
+        choices = data.get("choices")
+        if isinstance(choices, list) and len(choices) > 0:
+            msg = choices[0].get("message", {})
+            content = msg.get("content", "")
+            if content:
+                return content
+
+    raise RuntimeError(f"Unexpected CIRCUIT response: {str(data)[:300]}")
+
+
 def analyze_log_with_ai(log_content, failure="", defect_class="", station="", bu="", keywords="", exclude_id=None):
     """Analyze log content using Google Gemini AI.
 
     Returns: {'success': bool, 'source': str, 'root_cause': str, 'action': str, 'details': list|None}
     """
+    # Tier 0: Try CIRCUIT API first (if configured)
+    circuit_cfg = _get_circuit_config()
+    ai_error = None
+    if circuit_cfg["enabled"]:
+        try:
+            prompt = _build_prompt(bu, station, failure, defect_class, log_content, keywords)
+            result = _call_circuit_api(circuit_cfg, prompt)
+            if result:
+                root_cause, action = _parse_ai_response(result)
+                return {
+                    "success": True,
+                    "source": "circuit",
+                    "root_cause": root_cause,
+                    "action": action,
+                    "suggestion": result,
+                    "details": None,
+                }
+        except Exception as e:
+            ai_error = f"CIRCUIT unavailable: {e}"
+
     # Tier 1: Try Google Gemini AI (with multiple key rotation)
     api_keys = _get_api_keys()
-    ai_error = None
     for api_key in api_keys:
         try:
             result = _call_gemini(api_key, log_content, failure, defect_class, station, bu, keywords)
@@ -52,9 +143,12 @@ def analyze_log_with_ai(log_content, failure="", defect_class="", station="", bu
                     "details": None,
                 }
         except Exception as e:
-            ai_error = str(e)
+            ai_error = str(e) if not ai_error else ai_error
             err_str = ai_error.lower()
-            if any(k in err_str for k in ("quota", "resource_exhausted", "429", "503", "unavailable", "overloaded", "high demand")):
+            if any(
+                k in err_str
+                for k in ("quota", "resource_exhausted", "429", "503", "unavailable", "overloaded", "high demand")
+            ):
                 print(f"API key ...{api_key[-6:]} unavailable, trying next key...")
                 continue
             print(f"Gemini API error: {e}")
@@ -149,8 +243,9 @@ def beautify_root_cause_action(root_cause, action):
     Returns: {'success': bool, 'root_cause': str, 'action': str, 'error': str|None}
     """
     api_keys = _get_api_keys()
-    if not api_keys:
-        return {"success": False, "error": "No API key configured. Set GEMINI_API_KEY in .env or Settings page."}
+    circuit_cfg = _get_circuit_config()
+    if not api_keys and not circuit_cfg["enabled"]:
+        return {"success": False, "error": "No AI config found. Set CIRCUIT API or GEMINI API key in Settings."}
 
     prompt = f"""You are a technical writing expert for manufacturing defect reports.
 Your task is to improve the clarity and readability of the following Root Cause and Action text.
@@ -177,6 +272,19 @@ Action:
 1. [improved step]
 2. [improved step]
 ..."""
+
+    if circuit_cfg["enabled"]:
+        try:
+            result_text = _call_circuit_api(circuit_cfg, prompt)
+            if result_text:
+                new_rc, new_action = _parse_ai_response(result_text)
+                return {
+                    "success": True,
+                    "root_cause": new_rc or root_cause,
+                    "action": new_action or action,
+                }
+        except Exception:
+            pass
 
     for api_key in api_keys:
         try:
@@ -228,10 +336,11 @@ def translate_root_cause_action(root_cause, action, target_lang):
     Returns: {'success': bool, 'root_cause': str, 'action': str, 'error': str|None}
     """
     api_keys = _get_api_keys()
-    if not api_keys:
+    circuit_cfg = _get_circuit_config()
+    if not api_keys and not circuit_cfg["enabled"]:
         return {
             "success": False,
-            "error": "No API key configured. Set GEMINI_API_KEY in .env or Settings page.",
+            "error": "No AI config found. Set CIRCUIT API or GEMINI API key in Settings.",
         }
 
     lang_names = {"zh": "Chinese (Simplified)", "vi": "Vietnamese", "en": "English"}
@@ -249,6 +358,19 @@ def translate_root_cause_action(root_cause, action, target_lang):
         "Preserve the original formatting (numbered steps, line breaks).\n\n"
         f"{combined.strip()}"
     )
+
+    if circuit_cfg["enabled"]:
+        try:
+            result = _call_circuit_api(circuit_cfg, prompt)
+            if result:
+                t_rc, t_action = _parse_ai_response(result)
+                return {
+                    "success": True,
+                    "root_cause": t_rc or root_cause,
+                    "action": t_action or action,
+                }
+        except Exception:
+            pass
 
     for api_key in api_keys:
         try:
@@ -431,5 +553,22 @@ def test_ai_connection(api_key):
             return True, response.text
         except Exception as e:
             return False, str(e)
+    except Exception as e:
+        return False, str(e)
+
+
+def test_circuit_connection(endpoint, app_key, access_token, model=""):
+    """Test CIRCUIT API connectivity using the configured endpoint and credentials."""
+    cfg = {
+        "endpoint": (endpoint or "").strip(),
+        "app_key": (app_key or "").strip(),
+        "access_token": (access_token or "").strip(),
+        "model": (model or "").strip() or CIRCUIT_DEFAULT_MODELS[0],
+    }
+    if not cfg["endpoint"] or not cfg["app_key"] or not cfg["access_token"]:
+        return False, "Endpoint/AppKey/Access Token are required"
+    try:
+        text = _call_circuit_api(cfg, "Say connected.")
+        return True, f"[{cfg['model']}] {text[:120]}"
     except Exception as e:
         return False, str(e)

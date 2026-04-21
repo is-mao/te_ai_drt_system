@@ -145,11 +145,12 @@ python app.py
 2. AI 返回 Root Cause 和 Action 建议
 3. 可以点击 **「Accept Both」** 同时接受，或分别点击 **「Accept Root Cause Only」** / **「Accept Action Only」**
 
-**AI 诊断四级降级机制**：
+**AI 诊断五级降级机制**：
 
 | 级别 | 方式 | 说明 |
 |------|------|------|
-| Tier 1 | Gemini AI | 调用 Google Gemini API 深度分析 |
+| Tier 0 | CIRCUIT API | 优先调用 CIRCUIT（chat-ai.cisco.com）进行分析 |
+| Tier 1 | Gemini AI | CIRCUIT 不可用时，调用 Google Gemini API |
 | Tier 2 | 历史记录匹配 | 根据关键词搜索已有记录的 Root Cause |
 | Tier 3 | 静态故障字典 | 内置的故障码对照表 |
 | Tier 4 | 无建议 | 无法匹配时提示手动填写 |
@@ -266,6 +267,19 @@ python app.py
 - 查看当前 API Key 状态（显示脱敏后的 Key）
 - 更新 Gemini API Key
 - 测试 API 连接是否正常
+
+### CIRCUIT API Configuration
+
+- 支持配置 CIRCUIT Endpoint、AppKey、Access Token、Preferred Model
+- 系统内置默认值：
+	- Endpoint: `https://chat-ai.cisco.com/openai/deployments/gemini-3.1-flash-lite/chat/completions?api-version=2025-04-01-preview`
+	- AppKey: `egai-prd-supplychain-262013805-summarize-1776759998924`
+	- Model: `gemini-3.1-flash-lite`
+- Access Token 通常约 1 小时过期，过期后仅需更新 Token
+- 点击 **Test CIRCUIT** 可测试连通性；若输入框为空，系统会自动使用已保存 Token
+- 认证方式：
+	- Header: `api-key: <Access Token>`
+	- Payload: `user` 字段为 JSON 字符串，包含 `appkey`
 
 ---
 

@@ -1,13 +1,20 @@
 from flask import Blueprint, request, jsonify, render_template
 from routes.auth import login_required
 from models.system_config import SystemConfig
-from services.ai_service import test_ai_connection
+from services.ai_service import test_ai_connection, test_circuit_connection
 import os
 
 settings_bp = Blueprint("settings", __name__)
 
 # Path to .env file
 _ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+
+# CIRCUIT API defaults (no need to change unless CIRCUIT updates their endpoints)
+CIRCUIT_DEFAULT_ENDPOINT = (
+    "https://chat-ai.cisco.com/openai/deployments/gemini-3.1-flash-lite/chat/completions?api-version=2025-04-01-preview"
+)
+CIRCUIT_DEFAULT_APPKEY = "egai-prd-supplychain-262013805-summarize-1776759998924"
+CIRCUIT_DEFAULT_MODEL = "gemini-3.1-flash-lite"
 
 
 def _read_env_key():
@@ -94,4 +101,83 @@ def test_ai():
         return jsonify({"success": False, "message": "No API key configured. Please enter a key first."})
 
     success, message = test_ai_connection(api_key)
+    return jsonify({"success": success, "message": message})
+
+
+def _mask_token(value):
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "****"
+    return value[:4] + "*" * (len(value) - 8) + value[-4:]
+
+
+@settings_bp.route("/api/settings/circuit", methods=["GET"])
+@login_required
+def get_circuit_settings():
+    # Return stored values or defaults
+    endpoint = SystemConfig.get_value("circuit_api_endpoint", "") or CIRCUIT_DEFAULT_ENDPOINT
+    app_key = SystemConfig.get_value("circuit_app_key", "") or CIRCUIT_DEFAULT_APPKEY
+    access_token = SystemConfig.get_value("circuit_access_token", "") or ""
+    model = SystemConfig.get_value("circuit_model", "") or CIRCUIT_DEFAULT_MODEL
+
+    return jsonify(
+        {
+            "has_config": bool(access_token),
+            "endpoint": endpoint,
+            "app_key": app_key,
+            "model": model,
+            "masked_app_key": _mask_token(app_key),
+            "masked_access_token": _mask_token(access_token),
+        }
+    )
+
+
+@settings_bp.route("/api/settings/circuit", methods=["PUT"])
+@login_required
+def update_circuit_settings():
+    data = request.get_json(silent=True) or {}
+
+    # Accept all fields; use defaults if not provided
+    endpoint = (data.get("endpoint") or "").strip() or CIRCUIT_DEFAULT_ENDPOINT
+    app_key = (data.get("app_key") or "").strip() or CIRCUIT_DEFAULT_APPKEY
+    access_token = (data.get("access_token") or "").strip()
+    model = (data.get("model") or "").strip() or CIRCUIT_DEFAULT_MODEL
+
+    if endpoint:
+        SystemConfig.set_value("circuit_api_endpoint", endpoint)
+    if app_key:
+        SystemConfig.set_value("circuit_app_key", app_key)
+    if access_token:
+        SystemConfig.set_value("circuit_access_token", access_token)
+    if model:
+        SystemConfig.set_value("circuit_model", model)
+
+    if data.get("clear"):
+        SystemConfig.set_value("circuit_api_endpoint", "")
+        SystemConfig.set_value("circuit_app_key", "")
+        SystemConfig.set_value("circuit_access_token", "")
+        SystemConfig.set_value("circuit_model", "")
+
+    return jsonify({"success": True, "message": "CIRCUIT API settings updated."})
+
+
+@settings_bp.route("/api/settings/circuit/test", methods=["POST"])
+@login_required
+def test_circuit():
+    data = request.get_json(silent=True) or {}
+
+    # Use provided values, fallback to stored values, fallback to defaults
+    endpoint = (
+        (data.get("endpoint") or "").strip()
+        or SystemConfig.get_value("circuit_api_endpoint", "")
+        or CIRCUIT_DEFAULT_ENDPOINT
+    )
+    app_key = (
+        (data.get("app_key") or "").strip() or SystemConfig.get_value("circuit_app_key", "") or CIRCUIT_DEFAULT_APPKEY
+    )
+    access_token = (data.get("access_token") or "").strip() or SystemConfig.get_value("circuit_access_token", "") or ""
+    model = (data.get("model") or "").strip() or SystemConfig.get_value("circuit_model", "") or CIRCUIT_DEFAULT_MODEL
+
+    success, message = test_circuit_connection(endpoint, app_key, access_token, model)
     return jsonify({"success": success, "message": message})
