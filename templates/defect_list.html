@@ -32,62 +32,62 @@
 <!-- Filter Bar -->
 <div class="card filter-card mb-3">
     <div class="card-body py-2">
-        <form id="filterForm" class="row g-2 align-items-end">
-            <div class="col-auto">
+        <form id="filterForm" class="d-flex flex-wrap align-items-end gap-2">
+            <div class="filter-item" style="min-width:80px; flex:1 1 100px;">
                 <label class="form-label mb-0">BU</label>
-                <select id="filterBu" class="form-select form-select-sm" style="width:110px;">
+                <select id="filterBu" class="form-select form-select-sm">
                     <option value="">All</option>
                     {% for bu in bu_options %}
                     <option value="{{ bu }}">{{ bu }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-auto">
+            <div class="filter-item" style="min-width:100px; flex:1 1 140px;">
                 <label class="form-label mb-0">Defect Class</label>
-                <select id="filterDefectClass" class="form-select form-select-sm" style="width:160px;">
+                <select id="filterDefectClass" class="form-select form-select-sm">
                     <option value="">All</option>
                     {% for dc in defect_classes %}
                     <option value="{{ dc }}">{{ dc }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-auto">
+            <div class="filter-item" style="min-width:120px; flex:1 1 170px;">
                 <label class="form-label mb-0">Defect Value</label>
-                <select id="filterDefectValue" class="form-select form-select-sm" style="width:200px;">
+                <select id="filterDefectValue" class="form-select form-select-sm">
                     <option value="">All</option>
                 </select>
             </div>
-            <div class="col-auto">
+            <div class="filter-item" style="min-width:80px; flex:1 1 100px;">
                 <label class="form-label mb-0">Station</label>
-                <select id="filterStation" class="form-select form-select-sm" style="width:110px;">
+                <select id="filterStation" class="form-select form-select-sm">
                     <option value="">All</option>
                     {% for st in station_options %}
                     <option value="{{ st }}">{{ st }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-auto">
+            <div class="filter-item" style="min-width:80px; flex:1 1 100px;">
                 <label class="form-label mb-0">Owner</label>
-                <select id="filterOwner" class="form-select form-select-sm" style="width:110px;">
+                <select id="filterOwner" class="form-select form-select-sm">
                     <option value="">All</option>
                     {% for ow in owner_options %}
                     <option value="{{ ow }}">{{ ow }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-auto">
+            <div class="filter-item" style="min-width:110px; flex:1 1 130px;">
                 <label class="form-label mb-0">Date From</label>
-                <input type="date" id="filterDateFrom" class="form-control form-control-sm" style="width:140px;">
+                <input type="date" id="filterDateFrom" class="form-control form-control-sm">
             </div>
-            <div class="col-auto">
+            <div class="filter-item" style="min-width:110px; flex:1 1 130px;">
                 <label class="form-label mb-0">Date To</label>
-                <input type="date" id="filterDateTo" class="form-control form-control-sm" style="width:140px;">
+                <input type="date" id="filterDateTo" class="form-control form-control-sm">
             </div>
-            <div class="col-auto">
+            <div class="filter-item" style="min-width:120px; flex:2 1 180px;">
                 <label class="form-label mb-0">Search</label>
-                <input type="text" id="filterSearch" class="form-control form-control-sm" style="width:220px;" placeholder="SN, Failure, PN...">
+                <input type="text" id="filterSearch" class="form-control form-control-sm" placeholder="SN, Failure, PN...">
             </div>
-            <div class="col-auto d-flex gap-2">
+            <div class="filter-item d-flex gap-2 flex-shrink-0" style="align-self:flex-end;">
                 <button type="submit" id="applyBtn" class="btn btn-primary btn-sm"><i class="bi bi-funnel-fill me-1" id="applyIcon"></i>Apply</button>
                 <button type="button" id="resetFiltersBtn" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</button>
             </div>

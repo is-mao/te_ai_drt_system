@@ -49,13 +49,17 @@
             </a>
         </div>
         <div class="navbar-right">
-            <span class="navbar-user">
-                <i class="bi bi-person-circle"></i>
-                {{ session.get('username', '') }}
-            </span>
-            <button class="btn btn-outline-light btn-sm navbar-logout" id="logoutBtn">
-                <i class="bi bi-box-arrow-right"></i> Logout
-            </button>
+            <div class="dropdown">
+                <button class="btn btn-link navbar-user dropdown-toggle text-white text-decoration-none p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="border:none;">
+                    <i class="bi bi-person-circle"></i>
+                    {{ session.get('username', '') }}
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" id="changePasswordLink"><i class="bi bi-key me-2"></i>Change Password</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="#" id="logoutBtn"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+                </ul>
+            </div>
         </div>
     </nav>
 
@@ -63,6 +67,46 @@
     <div class="main-content">
         <div class="content-wrapper">
             {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header" style="background: var(--primary); color: #fff;">
+                    <h5 class="modal-title" id="changePasswordLabel"><i class="bi bi-key me-2"></i>Change Password</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Current Password</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="cpOldPassword" placeholder="Enter current password">
+                            <button class="btn btn-outline-secondary cp-toggle-pw" type="button" tabindex="-1"><i class="bi bi-eye"></i></button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">New Password</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="cpNewPassword" placeholder="Min 8 characters">
+                            <button class="btn btn-outline-secondary cp-toggle-pw" type="button" tabindex="-1"><i class="bi bi-eye"></i></button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirm New Password</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="cpConfirmPassword" placeholder="Re-enter new password">
+                            <button class="btn btn-outline-secondary cp-toggle-pw" type="button" tabindex="-1"><i class="bi bi-eye"></i></button>
+                        </div>
+                    </div>
+                    <div id="cpResult" style="display:none;"></div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="cpSubmitBtn"><i class="bi bi-shield-check me-1"></i>Change Password</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -146,7 +190,8 @@
         }
 
         // Logout handler
-        document.getElementById('logoutBtn').addEventListener('click', async function () {
+        document.getElementById('logoutBtn').addEventListener('click', async function (e) {
+            e.preventDefault();
             try {
                 const response = await fetch('/api/auth/logout', { method: 'POST' });
                 const data = await response.json();
@@ -155,6 +200,79 @@
                 }
             } catch (err) {
                 window.location.href = '/login';
+            }
+        });
+
+        // Change Password handler
+        document.getElementById('changePasswordLink').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('cpOldPassword').value = '';
+            document.getElementById('cpNewPassword').value = '';
+            document.getElementById('cpConfirmPassword').value = '';
+            document.getElementById('cpResult').style.display = 'none';
+            // Reset all eye icons
+            document.querySelectorAll('.cp-toggle-pw').forEach(function(btn) {
+                var input = btn.previousElementSibling;
+                input.type = 'password';
+                btn.querySelector('i').className = 'bi bi-eye';
+            });
+            new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
+        });
+
+        // Toggle password visibility
+        document.querySelectorAll('.cp-toggle-pw').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var input = this.previousElementSibling;
+                var icon = this.querySelector('i');
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    icon.className = 'bi bi-eye-slash';
+                } else {
+                    input.type = 'password';
+                    icon.className = 'bi bi-eye';
+                }
+            });
+        });
+
+        document.getElementById('cpSubmitBtn').addEventListener('click', async function() {
+            const oldPw = document.getElementById('cpOldPassword').value;
+            const newPw = document.getElementById('cpNewPassword').value;
+            const confirmPw = document.getElementById('cpConfirmPassword').value;
+            const resultDiv = document.getElementById('cpResult');
+
+            if (!oldPw || !newPw || !confirmPw) {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<div class="alert alert-warning py-2 mb-0">Please fill in all fields</div>';
+                return;
+            }
+            if (newPw !== confirmPw) {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<div class="alert alert-warning py-2 mb-0">New passwords do not match</div>';
+                return;
+            }
+            if (newPw.length < 8) {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<div class="alert alert-warning py-2 mb-0">New password must be at least 8 characters</div>';
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({old_password: oldPw, new_password: newPw, confirm_password: confirmPw})
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('changePasswordModal')).hide();
+                    showToast('Password changed successfully', 'success');
+                } else {
+                    resultDiv.style.display = 'block';
+                    resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + (data.error || 'Failed') + '</div>';
+                }
+            } catch (err) {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0">Network error</div>';
             }
         });
 
@@ -167,16 +285,24 @@
                 }
             });
             // Load pending badge count
+            refreshPendingBadge();
+        })();
+
+        function refreshPendingBadge() {
             fetch('/api/draft-records?per_page=1&page=1')
                 .then(r => r.json())
                 .then(d => {
                     const badge = document.getElementById('navPendingBadge');
-                    if (badge && d.total > 0) {
-                        badge.textContent = d.total;
-                        badge.style.display = '';
+                    if (badge) {
+                        if (d.total > 0) {
+                            badge.textContent = d.total;
+                            badge.style.display = '';
+                        } else {
+                            badge.style.display = 'none';
+                        }
                     }
                 }).catch(() => {});
-        })();
+        }
 
         // Column resize for data-table
         (function () {

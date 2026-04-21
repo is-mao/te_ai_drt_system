@@ -223,6 +223,7 @@ async function doClearLocal() {
             refreshList();
             loadMergeList();
             loadMergedUsers();
+            refreshPendingBadge();
         }
     } catch (err) {
         showToast('Clear failed: ' + err.message, 'danger');
@@ -270,6 +271,7 @@ async function doPull(username) {
         if (result.success) {
             // Brief delay to let DB engine reconnect after dispose
             await new Promise(r => setTimeout(r, 500));
+            refreshPendingBadge();
         }
         refreshList();
     } catch (err) {
@@ -370,6 +372,7 @@ async function doPullMerge() {
         });
         const result = await response.json();
         showToast(result.success ? result.message : (result.error || 'Merge failed.'), result.success ? 'success' : 'danger');
+        if (result.success) refreshPendingBadge();
         loadMergedUsers();
         document.querySelectorAll('.merge-checkbox').forEach(cb => cb.checked = false);
         const selectAll = document.getElementById('selectAllMerge');

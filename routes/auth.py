@@ -59,6 +59,39 @@ def api_logout():
     return jsonify({"success": True, "message": "Logged out successfully"})
 
 
+@auth_bp.route("/api/auth/change-password", methods=["POST"])
+@login_required
+def change_password():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "Invalid request body"}), 400
+
+    old_password = data.get("old_password", "")
+    new_password = data.get("new_password", "")
+    confirm_password = data.get("confirm_password", "")
+
+    if not old_password or not new_password or not confirm_password:
+        return jsonify({"success": False, "error": "All fields are required"}), 400
+
+    if new_password != confirm_password:
+        return jsonify({"success": False, "error": "New passwords do not match"}), 400
+
+    if len(new_password) < 8:
+        return jsonify({"success": False, "error": "New password must be at least 8 characters"}), 400
+
+    user = User.query.get(session["user_id"])
+    if not user:
+        return jsonify({"success": False, "error": "User not found"}), 404
+
+    if not user.check_password(old_password):
+        return jsonify({"success": False, "error": "Current password is incorrect"}), 401
+
+    user.set_password(new_password)
+    db.session.commit()
+
+    return jsonify({"success": True, "message": "Password changed successfully"})
+
+
 @auth_bp.route("/api/auth/status", methods=["GET"])
 def auth_status():
     if session.get("user_id"):

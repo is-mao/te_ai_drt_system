@@ -71,6 +71,7 @@ def defect_edit(id):
     if session.get("role") != "admin":
         if record.owner and record.owner != session.get("username", ""):
             from flask import abort
+
             abort(403)
     return render_template(
         "defect_form.html",

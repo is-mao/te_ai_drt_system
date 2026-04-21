@@ -143,7 +143,13 @@ def api_clear_local():
     try:
         count = DefectReport.query.delete()
         db.session.commit()
-        return jsonify({"success": True, "deleted": count, "message": f"Cleared {count} local record(s). You can now Pull your data from the remote server."})
+        return jsonify(
+            {
+                "success": True,
+                "deleted": count,
+                "message": f"Cleared {count} local record(s). You can now Pull your data from the remote server.",
+            }
+        )
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 500
@@ -273,6 +279,7 @@ def _parse_dt(value):
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
             try:
                 from datetime import datetime
+
                 return datetime.strptime(value, fmt)
             except ValueError:
                 continue

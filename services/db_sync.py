@@ -289,8 +289,14 @@ def pull_mine(
 
         # Backup current local DB before overwriting
         if local_db.exists():
-            backup = local_db.with_suffix(f".backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+            backup_dir = Path(app_root) / "backups"
+            backup_dir.mkdir(exist_ok=True)
+            backup = backup_dir / f"drt_system.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
             shutil.copy2(local_db, backup)
+            # Keep only the latest 5 backups
+            backups = sorted(backup_dir.glob("drt_system.backup_*.db"), key=lambda f: f.stat().st_mtime)
+            for old in backups[:-5]:
+                old.unlink(missing_ok=True)
 
         sftp.get(remote_db_path, str(local_db))
 

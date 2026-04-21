@@ -131,6 +131,16 @@ body {
     gap: 5px;
 }
 
+.navbar-user:hover,
+.navbar-user:focus {
+    color: #fff;
+}
+
+.navbar-user::after {
+    font-size: 0.6rem;
+    vertical-align: middle;
+}
+
 .navbar-logout {
     color: rgba(255, 255, 255, 0.7) !important;
     border-color: rgba(255, 255, 255, 0.25) !important;
