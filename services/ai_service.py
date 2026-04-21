@@ -54,8 +54,8 @@ def analyze_log_with_ai(log_content, failure="", defect_class="", station="", bu
         except Exception as e:
             ai_error = str(e)
             err_str = ai_error.lower()
-            if "quota" in err_str or "resource_exhausted" in err_str or "429" in err_str:
-                print(f"API key ...{api_key[-6:]} quota exhausted, trying next key...")
+            if any(k in err_str for k in ("quota", "resource_exhausted", "429", "503", "unavailable", "overloaded", "high demand")):
+                print(f"API key ...{api_key[-6:]} unavailable, trying next key...")
                 continue
             print(f"Gemini API error: {e}")
             traceback.print_exc()
@@ -346,8 +346,8 @@ def _call_gemini(api_key, log_content, failure, defect_class, station, bu, keywo
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()
-                if "quota" in err_str or "resource_exhausted" in err_str or "429" in err_str:
-                    print(f"Quota exhausted for {model_name}, trying next model...")
+                if any(k in err_str for k in ("quota", "resource_exhausted", "429", "503", "unavailable", "overloaded", "high demand")):
+                    print(f"Model {model_name} unavailable ({type(e).__name__}), trying next model...")
                     continue
                 raise
 
