@@ -293,6 +293,10 @@ def _build_prompt(bu, station, failure, defect_class, log_content, keywords=""):
     if keywords:
         keywords_section = f"\nUser-provided Keywords/Hints: {keywords}\nIMPORTANT: Pay special attention to the keywords above. They indicate the engineer's suspected direction for root cause analysis. Use them to guide your diagnosis.\n"
 
+    retest_rule = ""
+    if bu and bu.strip().upper() == "CRBU":
+        retest_rule = "\n- The last action step must always be: Retest and confirm PASS."
+
     return f"""You are a manufacturing defect analysis expert for Cisco networking equipment.
 Analyze the following test logs (sequence log and buffer log) and diagnose the root cause.
 
@@ -305,20 +309,19 @@ Defect Class: {defect_class}
 
 IMPORTANT formatting rules:
 - Plain text ONLY. No markdown, no bold (**), no asterisks, no special formatting.
-- Root Cause: 1-3 concise sentences.
-- Action: numbered corrective steps. Only include steps for the actual cause category:
+- Root Cause: ONE single sentence summarizing the root cause. Be concise and direct.
+- Action: exactly 3 numbered steps.{retest_rule}
+  Only include steps for the actual cause category:
   * If operator issue: only operator-related steps
   * If test program issue: only test program-related steps
   * If test station/equipment issue: only station/equipment-related steps
-  * May combine categories if multiple causes exist
-  * Last step must always be: Retest and confirm PASS
 
 Format your response EXACTLY as:
-Root Cause: [plain text analysis]
+Root Cause: [one sentence]
 Action:
 1. [step]
 2. [step]
-3. Retest and confirm PASS"""
+3. [step]"""
 
 
 def _call_gemini(api_key, log_content, failure, defect_class, station, bu, keywords=""):
