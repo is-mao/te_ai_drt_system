@@ -185,6 +185,10 @@
                             <div id="aiResultBox" class="alert alert-info alert-dismissible mt-2 d-none" role="alert">
                                 <strong>AI Suggestion:</strong>
                                 <div class="mt-1">
+                                    <label class="fw-bold small">Data Source:</label>
+                                    <div id="aiSourceText" class="small text-muted"></div>
+                                </div>
+                                <div class="mt-1">
                                     <label class="fw-bold small">Root Cause:</label>
                                     <div id="aiRootCauseText" style="white-space: pre-wrap;"></div>
                                 </div>
@@ -452,6 +456,7 @@
     </div>
   </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -836,6 +841,8 @@
         errorBox.classList.add('d-none');
 
         try {
+            let forceCircuit = false;
+
             const resp = await fetch('/api/ai/analyze-log', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -849,6 +856,7 @@
                     defect_class: document.getElementById('fieldDefectClass').value,
                     keywords: document.getElementById('aiKeywords').value.trim(),
                     exclude_id: currentRecordId,
+                    force_circuit: forceCircuit,
                 }),
             });
             const json = await resp.json();
@@ -856,12 +864,28 @@
             if (json.success && (json.root_cause || json.action)) {
                 // Show source badge
                 let sourceBadge = '';
-                if (json.source === 'ai') sourceBadge = '<span class="badge bg-success me-1">Gemini AI</span>';
-                else if (json.source === 'history') sourceBadge = '<span class="badge bg-warning text-dark me-1">Historical Match</span>';
-                else if (json.source === 'dict') sourceBadge = '<span class="badge bg-secondary me-1">Failure Dictionary</span>';
+                let sourceText = 'Unknown';
+                if (json.source === 'circuit') {
+                    sourceBadge = '<span class="badge bg-primary me-1">CIRCUIT API</span>';
+                    sourceText = 'CIRCUIT API' + (json.model ? ' + ' + json.model : '');
+                } else if (json.source === 'ai') {
+                    sourceBadge = '<span class="badge bg-success me-1">Gemini AI</span>';
+                    sourceText = 'Google Gemini AI' + (json.model ? ' + ' + json.model : '');
+                } else if (json.source === 'history') {
+                    sourceBadge = '<span class="badge bg-warning text-dark me-1">Historical Match</span>';
+                    sourceText = 'Historical Records';
+                } else if (json.source === 'dict') {
+                    sourceBadge = '<span class="badge bg-secondary me-1">Failure Dictionary</span>';
+                    sourceText = 'Failure Dictionary';
+                }
+
+                document.getElementById('aiSourceText').textContent = sourceText;
 
                 let aiWarning = '';
                 if (json.ai_error) aiWarning = '<div class="text-warning small mb-1">AI unavailable: ' + escapeHtml(json.ai_error.substring(0, 120)) + '</div>';
+                if (json.circuit_token_expired) {
+                    aiWarning += '<div class="text-warning small mb-1">CIRCUIT token expired; fallback result is shown.</div>';
+                }
 
                 document.getElementById('aiRootCauseText').innerHTML = sourceBadge + aiWarning;
                 let rcNode = document.createTextNode(json.root_cause || 'N/A');

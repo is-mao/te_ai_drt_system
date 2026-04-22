@@ -102,14 +102,88 @@ def _call_circuit_api(circuit_cfg, prompt, model=None):
     raise RuntimeError(f"Unexpected CIRCUIT response: {str(data)[:300]}")
 
 
-def analyze_log_with_ai(log_content, failure="", defect_class="", station="", bu="", keywords="", exclude_id=None):
-    """Analyze log content using Google Gemini AI.
+def analyze_log_with_ai(
+    log_content,
+    failure="",
+    defect_class="",
+    station="",
+    bu="",
+    keywords="",
+    exclude_id=None,
+    force_circuit=False,
+):
+    """Analyze log content using CIRCUIT/Gemini with fallback.
 
     Returns: {'success': bool, 'source': str, 'root_cause': str, 'action': str, 'details': list|None}
     """
     # Tier 0: Try CIRCUIT API first (if configured)
     circuit_cfg = _get_circuit_config()
     ai_error = None
+    circuit_error = None
+    circuit_token_expired = False
+
+    def _is_token_error(err_text):
+        err_lower = (err_text or "").lower()
+        return any(
+            k in err_lower
+            for k in (
+                "http 401",
+                "jwt",
+                "oauth",
+                "access token",
+                "token expired",
+                "failedtoresolvevariable",
+                "validate token",
+            )
+        )
+
+    if force_circuit:
+        if not circuit_cfg["enabled"]:
+            return {
+                "success": False,
+                "source": "circuit",
+                "model": circuit_cfg.get("model") or CIRCUIT_DEFAULT_MODELS[0],
+                "root_cause": None,
+                "action": None,
+                "suggestion": None,
+                "details": None,
+                "ai_error": "CIRCUIT is not configured. Please enter Access Token in Settings.",
+                "circuit_token_expired": False,
+                "circuit_error": None,
+            }
+
+        try:
+            prompt = _build_prompt(bu, station, failure, defect_class, log_content, keywords)
+            result = _call_circuit_api(circuit_cfg, prompt)
+            if result:
+                root_cause, action = _parse_ai_response(result)
+                return {
+                    "success": True,
+                    "source": "circuit",
+                    "model": circuit_cfg.get("model") or CIRCUIT_DEFAULT_MODELS[0],
+                    "root_cause": root_cause,
+                    "action": action,
+                    "suggestion": result,
+                    "details": None,
+                    "circuit_token_expired": False,
+                    "circuit_error": None,
+                }
+        except Exception as e:
+            circuit_error = str(e)
+            circuit_token_expired = _is_token_error(circuit_error)
+            return {
+                "success": False,
+                "source": "circuit",
+                "model": circuit_cfg.get("model") or CIRCUIT_DEFAULT_MODELS[0],
+                "root_cause": None,
+                "action": None,
+                "suggestion": None,
+                "details": None,
+                "ai_error": f"CIRCUIT failed: {circuit_error}",
+                "circuit_token_expired": circuit_token_expired,
+                "circuit_error": circuit_error,
+            }
+
     if circuit_cfg["enabled"]:
         try:
             prompt = _build_prompt(bu, station, failure, defect_class, log_content, keywords)
@@ -119,28 +193,44 @@ def analyze_log_with_ai(log_content, failure="", defect_class="", station="", bu
                 return {
                     "success": True,
                     "source": "circuit",
+                    "model": circuit_cfg.get("model") or CIRCUIT_DEFAULT_MODELS[0],
                     "root_cause": root_cause,
                     "action": action,
                     "suggestion": result,
                     "details": None,
+                    "circuit_token_expired": False,
                 }
         except Exception as e:
+            circuit_error = str(e)
             ai_error = f"CIRCUIT unavailable: {e}"
+            circuit_token_expired = _is_token_error(circuit_error)
 
     # Tier 1: Try Google Gemini AI (with multiple key rotation)
     api_keys = _get_api_keys()
     for api_key in api_keys:
         try:
-            result = _call_gemini(api_key, log_content, failure, defect_class, station, bu, keywords)
+            result, used_model = _call_gemini(
+                api_key,
+                log_content,
+                failure,
+                defect_class,
+                station,
+                bu,
+                keywords,
+                return_model=True,
+            )
             if result:
                 root_cause, action = _parse_ai_response(result)
                 return {
                     "success": True,
                     "source": "ai",
+                    "model": used_model,
                     "root_cause": root_cause,
                     "action": action,
                     "suggestion": result,
                     "details": None,
+                    "circuit_token_expired": circuit_token_expired,
+                    "circuit_error": circuit_error,
                 }
         except Exception as e:
             ai_error = str(e) if not ai_error else ai_error
@@ -167,6 +257,8 @@ def analyze_log_with_ai(log_content, failure="", defect_class="", station="", bu
                 "suggestion": similar[0].get("root_cause", ""),
                 "details": similar,
                 "ai_error": ai_error,
+                "circuit_token_expired": circuit_token_expired,
+                "circuit_error": circuit_error,
             }
 
     # Tier 3: Static failure dictionary
@@ -182,6 +274,8 @@ def analyze_log_with_ai(log_content, failure="", defect_class="", station="", bu
                 "suggestion": root_cause,
                 "details": [{"defect_class": defect_cls, "defect_value": defect_val, "root_cause": root_cause}],
                 "ai_error": ai_error,
+                "circuit_token_expired": circuit_token_expired,
+                "circuit_error": circuit_error,
             }
 
     # Tier 4: No suggestion available
@@ -194,6 +288,8 @@ def analyze_log_with_ai(log_content, failure="", defect_class="", station="", bu
         "details": None,
         "ai_error": ai_error
         or ("No API key configured. Set GEMINI_API_KEY in .env or Settings page." if not api_keys else None),
+        "circuit_token_expired": circuit_token_expired,
+        "circuit_error": circuit_error,
     }
 
 
@@ -202,11 +298,39 @@ def _parse_ai_response(text):
     root_cause = ""
     action = ""
 
-    # Try to parse structured response
+    # Try to parse structured response in multiple languages.
+    # This handles CIRCUIT outputs like:
+    # - Root Cause / Recommended Action
+    # - 根本原因 / 操作
+    # - Nguyen nhan goc / Hanh dong
+    rc_labels = [
+        r"Root\s*Cause",
+        r"Recommended\s*Root\s*Cause",
+        r"\u6839\u672c\u539f\u56e0",
+        r"\u539f\u56e0",
+        r"Nguyen\s*nhan\s*goc",
+    ]
+    action_labels = [
+        r"(?:Recommended\s+)?Action",
+        r"\u64cd\u4f5c",           # 操作
+        r"\u5efa\u8bae\u64cd\u4f5c",  # 建议操作
+        r"\u5904\u7406\u65b9\u6848",  # 处理方案
+        r"\u63aa\u65bd",           # 措施
+        r"\u5efa\u8bae\u63aa\u65bd",  # 建议措施
+        r"\u884c\u52a8",           # 行动
+        r"\u89e3\u51b3\u65b9\u6848",  # 解决方案
+        r"\u5efa\u8bae",           # 建议
+        r"Hanh\s*dong",
+        r"H[àa]nh\s*[Đđ][oô]ng",  # Hành Động (Vietnamese with diacritics)
+        r"Bi[eệ]n\s*ph[aá]p",     # Biện pháp (Vietnamese)
+    ]
+    rc_pattern = "(?:" + "|".join(rc_labels) + ")"
+    action_pattern = "(?:" + "|".join(action_labels) + ")"
+
     rc_match = re.search(
-        r"Root\s*Cause[:\s]*(.+?)(?=(?:Recommended\s+)?Action[:\s]|$)", text, re.IGNORECASE | re.DOTALL
+        rf"{rc_pattern}[:\uff1a\s]*(.+?)(?={action_pattern}[:\uff1a\s]|$)", text, re.IGNORECASE | re.DOTALL
     )
-    action_match = re.search(r"(?:Recommended\s+)?Action[:\s]*(.+?)$", text, re.IGNORECASE | re.DOTALL)
+    action_match = re.search(rf"{action_pattern}[:\uff1a\s]*(.+?)$", text, re.IGNORECASE | re.DOTALL)
 
     if rc_match:
         root_cause = rc_match.group(1).strip()
@@ -355,7 +479,8 @@ def translate_root_cause_action(root_cause, action, target_lang):
     prompt = (
         f"Translate the following manufacturing defect report text into {lang_name}.\n"
         "Keep technical terms accurate. Output ONLY the translated text, no explanations.\n"
-        "Preserve the original formatting (numbered steps, line breaks).\n\n"
+        "Preserve the original formatting (numbered steps, line breaks).\n"
+        "IMPORTANT: Keep the section labels 'Root Cause:' and 'Action:' in English exactly as-is. Only translate the content after each label.\n\n"
         f"{combined.strip()}"
     )
 
@@ -446,12 +571,13 @@ Action:
 3. [step]"""
 
 
-def _call_gemini(api_key, log_content, failure, defect_class, station, bu, keywords=""):
+def _call_gemini(api_key, log_content, failure, defect_class, station, bu, keywords="", return_model=False):
     """Call Google Gemini API with retry-on-rate-limit (like stock_analysis)."""
     try:
         from google import genai
     except ImportError:
-        return _call_gemini_legacy(api_key, log_content, failure, defect_class, station, bu, keywords)
+        text = _call_gemini_legacy(api_key, log_content, failure, defect_class, station, bu, keywords)
+        return (text, "gemini-legacy") if return_model else text
 
     client = genai.Client(api_key=api_key)
     prompt = _build_prompt(bu, station, failure, defect_class, log_content, keywords)
@@ -464,7 +590,7 @@ def _call_gemini(api_key, log_content, failure, defect_class, station, bu, keywo
                     model=model_name,
                     contents=prompt,
                 )
-                return response.text
+                return (response.text, model_name) if return_model else response.text
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()

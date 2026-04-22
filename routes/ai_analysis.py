@@ -23,6 +23,7 @@ def analyze_log():
     bu = data.get("bu", "")
     keywords = data.get("keywords", "")
     exclude_id = data.get("exclude_id")  # ID of record being edited
+    force_circuit = bool(data.get("force_circuit", False))
 
     if not sequence_log and not buffer_log and not log_content and not failure:
         return jsonify({"error": "Please provide log content or failure information"}), 400
@@ -34,7 +35,14 @@ def analyze_log():
         combined_log = log_content
 
     result = analyze_log_with_ai(
-        combined_log, failure, defect_class, station, bu, keywords=keywords, exclude_id=exclude_id
+        combined_log,
+        failure,
+        defect_class,
+        station,
+        bu,
+        keywords=keywords,
+        exclude_id=exclude_id,
+        force_circuit=force_circuit,
     )
     return jsonify(result)
 
