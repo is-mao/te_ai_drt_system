@@ -107,7 +107,7 @@ def _migrate_columns(app):
 
 # Default user accounts: (username, email, role)
 _DEFAULT_USERS = [
-    ("admin", None, "user"),
+    ("admin", None, "admin"),
     ("antzhou", "antzhou@cisco.com", "user"),
     ("bhu3", "bhu3@cisco.com", "user"),
     ("caspliu", "caspliu@cisco.com", "user"),

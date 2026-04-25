@@ -49,11 +49,11 @@ def _now_iso() -> str:
 # Default SFTP connection settings
 # ---------------------------------------------------------------------------
 
-DEFAULT_SSH_HOST = "10.69.230.185"
-DEFAULT_SSH_PORT = 36021
-DEFAULT_SSH_USER = "root"
-DEFAULT_SSH_PASSWORD = "nbv12345"
-DEFAULT_REMOTE_BASE = "/root/drt_db_data"
+DEFAULT_SSH_HOST = os.environ.get("DRT_SYNC_SSH_HOST", "10.69.230.185")
+DEFAULT_SSH_PORT = int(os.environ.get("DRT_SYNC_SSH_PORT", "36021"))
+DEFAULT_SSH_USER = os.environ.get("DRT_SYNC_SSH_USER", "root")
+DEFAULT_SSH_PASSWORD = os.environ.get("DRT_SYNC_SSH_PASSWORD", "")
+DEFAULT_REMOTE_BASE = os.environ.get("DRT_SYNC_REMOTE_BASE", "/root/drt_db_data")
 
 
 class SFTPSession:

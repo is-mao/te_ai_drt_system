@@ -34,11 +34,15 @@ def _get_api_keys():
 
 
 def _get_circuit_config():
-    """Read CIRCUIT API config from DB/env fallback."""
-    endpoint = (SystemConfig.get_value("circuit_api_endpoint") or "").strip()
-    app_key = (SystemConfig.get_value("circuit_app_key") or "").strip()
-    access_token = (SystemConfig.get_value("circuit_access_token") or "").strip()
-    model = (SystemConfig.get_value("circuit_model") or "").strip()
+    """Read CIRCUIT API config from DB → .env → built-in default."""
+    endpoint = (SystemConfig.get_value("circuit_api_endpoint") or "").strip() or os.environ.get(
+        "CIRCUIT_API_ENDPOINT", ""
+    )
+    app_key = (SystemConfig.get_value("circuit_app_key") or "").strip() or os.environ.get("CIRCUIT_APP_KEY", "")
+    access_token = (SystemConfig.get_value("circuit_access_token") or "").strip() or os.environ.get(
+        "CIRCUIT_ACCESS_TOKEN", ""
+    )
+    model = (SystemConfig.get_value("circuit_model") or "").strip() or os.environ.get("CIRCUIT_MODEL", "")
     if not model:
         model = CIRCUIT_DEFAULT_MODELS[0]
     return {
@@ -312,17 +316,17 @@ def _parse_ai_response(text):
     ]
     action_labels = [
         r"(?:Recommended\s+)?Action",
-        r"\u64cd\u4f5c",           # 操作
+        r"\u64cd\u4f5c",  # 操作
         r"\u5efa\u8bae\u64cd\u4f5c",  # 建议操作
         r"\u5904\u7406\u65b9\u6848",  # 处理方案
-        r"\u63aa\u65bd",           # 措施
+        r"\u63aa\u65bd",  # 措施
         r"\u5efa\u8bae\u63aa\u65bd",  # 建议措施
-        r"\u884c\u52a8",           # 行动
+        r"\u884c\u52a8",  # 行动
         r"\u89e3\u51b3\u65b9\u6848",  # 解决方案
-        r"\u5efa\u8bae",           # 建议
+        r"\u5efa\u8bae",  # 建议
         r"Hanh\s*dong",
         r"H[àa]nh\s*[Đđ][oô]ng",  # Hành Động (Vietnamese with diacritics)
-        r"Bi[eệ]n\s*ph[aá]p",     # Biện pháp (Vietnamese)
+        r"Bi[eệ]n\s*ph[aá]p",  # Biện pháp (Vietnamese)
     ]
     rc_pattern = "(?:" + "|".join(rc_labels) + ")"
     action_pattern = "(?:" + "|".join(action_labels) + ")"

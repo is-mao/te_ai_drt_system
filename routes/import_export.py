@@ -801,9 +801,16 @@ def api_draft_batch_delete():
     if not ids:
         return jsonify({"success": False, "error": "Invalid IDs"}), 400
 
-    deleted = DefectReport.query.filter(DefectReport.id.in_(ids), DefectReport.status == "draft").delete(
-        synchronize_session=False
-    )
+    # Permission check: non-admin can only delete their own drafts
+    is_admin = session.get("role") == "admin"
+    username = session.get("username", "")
+    query = DefectReport.query.filter(DefectReport.id.in_(ids), DefectReport.status == "draft")
+    if not is_admin:
+        query = query.filter(
+            db.or_(DefectReport.owner == "", DefectReport.owner.is_(None), DefectReport.owner == username)
+        )
+
+    deleted = query.delete(synchronize_session=False)
     db.session.commit()
 
     return jsonify({"success": True, "deleted": deleted})

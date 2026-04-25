@@ -9,12 +9,17 @@ settings_bp = Blueprint("settings", __name__)
 # Path to .env file
 _ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 
-# CIRCUIT API defaults (no need to change unless CIRCUIT updates their endpoints)
-CIRCUIT_DEFAULT_ENDPOINT = (
-    "https://chat-ai.cisco.com/openai/deployments/gemini-3.1-flash-lite/chat/completions?api-version=2025-04-01-preview"
+# CIRCUIT API defaults – read from .env, with hardcoded fallbacks
+CIRCUIT_DEFAULT_ENDPOINT = os.environ.get(
+    "CIRCUIT_API_ENDPOINT",
+    "https://chat-ai.cisco.com/openai/deployments/gemini-3.1-flash-lite/chat/completions?api-version=2025-04-01-preview",
 )
-CIRCUIT_DEFAULT_APPKEY = "egai-prd-supplychain-262013805-summarize-1776759998924"
-CIRCUIT_DEFAULT_MODEL = "gemini-3.1-flash-lite"
+CIRCUIT_DEFAULT_APPKEY = os.environ.get(
+    "CIRCUIT_APP_KEY",
+    "egai-prd-supplychain-262013805-summarize-1776759998924",
+)
+CIRCUIT_DEFAULT_ACCESS_TOKEN = os.environ.get("CIRCUIT_ACCESS_TOKEN", "")
+CIRCUIT_DEFAULT_MODEL = os.environ.get("CIRCUIT_MODEL", "gemini-3.1-flash-lite")
 
 
 def _read_env_key():
@@ -31,6 +36,9 @@ def _read_env_key():
 
 def _write_env_key(value):
     """Write GEMINI_API_KEY to .env file."""
+    # Sanitize: reject values with newlines or control characters
+    if value and any(c in value for c in "\n\r\x00"):
+        raise ValueError("API key contains invalid characters")
     lines = []
     found = False
     if os.path.exists(_ENV_FILE):
@@ -118,7 +126,7 @@ def get_circuit_settings():
     # Return stored values or defaults
     endpoint = SystemConfig.get_value("circuit_api_endpoint", "") or CIRCUIT_DEFAULT_ENDPOINT
     app_key = SystemConfig.get_value("circuit_app_key", "") or CIRCUIT_DEFAULT_APPKEY
-    access_token = SystemConfig.get_value("circuit_access_token", "") or ""
+    access_token = SystemConfig.get_value("circuit_access_token", "") or CIRCUIT_DEFAULT_ACCESS_TOKEN
     model = SystemConfig.get_value("circuit_model", "") or CIRCUIT_DEFAULT_MODEL
 
     return jsonify(
