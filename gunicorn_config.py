@@ -7,8 +7,8 @@ bind = f"0.0.0.0:{os.environ.get('PORT', '5001')}"
 # Workers: 2-4x CPU cores for I/O bound apps, but cap at 4 for free tier
 workers = min(multiprocessing.cpu_count() * 2, 4)
 
-# Timeout (seconds) - generous for AI API calls
-timeout = 120
+# Timeout (seconds) - generous for AI API calls + Excel processing
+timeout = 300
 
 # Graceful timeout
 graceful_timeout = 30

@@ -31,6 +31,7 @@ def create_app():
     from routes.ai_analysis import ai_bp
     from routes.settings import settings_bp
     from routes.sync import sync_bp
+    from routes.transform import transform_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(defects_bp)
@@ -39,6 +40,7 @@ def create_app():
     app.register_blueprint(ai_bp)
     app.register_blueprint(settings_bp)
     app.register_blueprint(sync_bp)
+    app.register_blueprint(transform_bp)
 
     @app.route("/")
     def index():
@@ -162,4 +164,11 @@ app = create_app()
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "1") == "1"
     port = int(os.environ.get("PORT", 5001))
-    app.run(debug=debug, host="0.0.0.0", port=port)
+    # Limit reloader to only watch this project (avoid .venv / sibling dirs triggering restarts)
+    app.run(
+        debug=debug,
+        host="0.0.0.0",
+        port=port,
+        extra_files=[],
+        exclude_patterns=["__pycache__/*", ".venv/*", "readonly_dbs/*", "backups/*"],
+    )

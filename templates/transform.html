@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}Excel Transform - DRT System{% endblock %}
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div>
+        <h4><i class="bi bi-file-earmark-excel me-2" style="color: var(--primary);"></i>DF/DR Excel Transform</h4>
+        <div class="page-subtitle">AI-powered failure classification and Excel format conversion</div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">Upload & Column Mapping</div>
+    <div class="card-body">
+        <div class="row">
+            <!-- Left: Upload Form -->
+            <div class="col-lg-6">
+                <p class="text-muted">
+                    Upload a source DF/DR Excel file. The system will use CIRCUIT AI to automatically classify
+                    each failure test step and generate the target <code>temp.xlsx</code> format.
+                </p>
+
+                <form id="transformForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="file" class="form-label">Source Excel File (.xlsx)</label>
+                        <div id="dropZone" class="border border-2 border-dashed rounded-3 p-4 text-center position-relative"
+                             style="cursor:pointer; transition: all 0.2s ease; border-color: #dee2e6 !important;">
+                            <input type="file" class="position-absolute top-0 start-0 w-100 h-100 opacity-0" style="cursor:pointer;"
+                                   id="file" name="file" accept=".xlsx,.xls" required>
+                            <div id="dropContent">
+                                <i class="bi bi-cloud-arrow-up fs-1 text-muted"></i>
+                                <p class="mb-1 mt-2">Drag &amp; drop Excel file here, or <span class="text-primary fw-semibold">click to browse</span></p>
+                                <small class="text-muted">Supports .xlsx and .xls files</small>
+                            </div>
+                            <div id="fileInfo" style="display:none;">
+                                <i class="bi bi-file-earmark-excel fs-1 text-success"></i>
+                                <p class="mb-0 mt-2 fw-semibold" id="fileName"></p>
+                                <small class="text-muted" id="fileSize"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="useAi" name="use_ai" checked>
+                        <label class="form-check-label" for="useAi">
+                            Use CIRCUIT AI for failure classification
+                        </label>
+                        <div class="form-text">Uncheck to use default classification (faster, no AI call)</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <i class="bi bi-gear"></i> Transform & Download
+                    </button>
+                    <span id="statusMsg" class="ms-3 text-muted" style="display:none;">
+                        <span class="spinner-border spinner-border-sm"></span> Processing...
+                    </span>
+                </form>
+            </div>
+            <!-- Right: Column Mapping Reference -->
+            <div class="col-lg-6">
+                <h6 class="text-muted mb-2"><i class="bi bi-diagram-3"></i> Column Mapping Reference</h6>
+                <table class="table table-sm table-striped mb-0">
+                    <thead><tr><th>Source Column</th><th>Target Column</th></tr></thead>
+                    <tbody>
+                        <tr><td>UUT Serial Num</td><td>uut_serial_no, uudr_serial_no</td></tr>
+                        <tr><td>Test Area</td><td>failed_test</td></tr>
+                        <tr><td>Test Failed At Test Area</td><td>failure_symptom → <strong>AI classifies</strong></td></tr>
+                        <tr><td>Failed Test RecTime</td><td>failed_test_time</td></tr>
+                        <tr><td>UUT Part Num</td><td>uut_part_no → BU detection</td></tr>
+                        <tr><td>Machine</td><td>Server</td></tr>
+                        <tr><td>CM Location</td><td>cm_location, site</td></tr>
+                        <tr><td colspan="2"><em>AI generates: major_defect_class, defect_non_conform, defect_description, repair_class, repair_action</em></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transform History -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history me-1"></i> Transform History</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()" title="Refresh">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+    </div>
+    <div class="card-body p-0">
+        <div id="historyEmpty" class="text-center text-muted py-4" style="display:none;">
+            <i class="bi bi-inbox fs-3"></i>
+            <p class="mb-0 mt-1">No transform history yet</p>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0" id="historyTable" style="display:none;">
+                <thead class="table-light">
+                    <tr>
+                        <th>Time</th>
+                        <th>Source File</th>
+                        <th>Output File</th>
+                        <th style="width:80px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-table"></i> <span id="previewTitle">Preview</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="previewBody">
+                <div class="text-center py-4">
+                    <span class="spinner-border"></span>
+                    <p class="mt-2">Loading preview...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <small class="text-muted me-auto" id="previewInfo"></small>
+                <a id="previewDownloadBtn" href="#" class="btn btn-primary btn-sm">
+                    <i class="bi bi-download"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- Drop zone ---
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('file');
+const dropContent = document.getElementById('dropContent');
+const fileInfo = document.getElementById('fileInfo');
+const fileName = document.getElementById('fileName');
+const fileSize = document.getElementById('fileSize');
+
+function showFile(file) {
+    if (!file) return;
+    dropContent.style.display = 'none';
+    fileInfo.style.display = 'block';
+    fileName.textContent = file.name;
+    const kb = (file.size / 1024).toFixed(1);
+    fileSize.textContent = kb > 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB';
+    dropZone.style.borderColor = '#198754';
+    dropZone.style.backgroundColor = '#f0fdf4';
+}
+
+function resetDropZone() {
+    fileInput.value = '';
+    dropContent.style.display = 'block';
+    fileInfo.style.display = 'none';
+    dropZone.style.borderColor = '#dee2e6';
+    dropZone.style.backgroundColor = '';
+}
+
+fileInput.addEventListener('change', () => showFile(fileInput.files[0]));
+
+['dragenter', 'dragover'].forEach(evt => {
+    dropZone.addEventListener(evt, e => {
+        e.preventDefault(); e.stopPropagation();
+        dropZone.style.borderColor = '#0d6efd';
+        dropZone.style.backgroundColor = '#e8f0fe';
+    });
+});
+['dragleave', 'drop'].forEach(evt => {
+    dropZone.addEventListener(evt, e => {
+        e.preventDefault(); e.stopPropagation();
+        dropZone.style.borderColor = '#dee2e6';
+        dropZone.style.backgroundColor = '';
+    });
+});
+dropZone.addEventListener('drop', e => {
+    const files = e.dataTransfer.files;
+    if (files.length && /\.xlsx?$/i.test(files[0].name)) {
+        fileInput.files = files;
+        showFile(files[0]);
+    }
+});
+
+// --- Form submit ---
+document.getElementById('transformForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    const status = document.getElementById('statusMsg');
+    btn.disabled = true;
+    status.style.display = 'inline';
+    status.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
+
+    const formData = new FormData(this);
+    if (!document.getElementById('useAi').checked) {
+        formData.set('use_ai', 'false');
+    }
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000);  // 5 min timeout
+        const resp = await fetch('/transform/upload', {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (resp.ok) {
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'temp.xlsx';
+            a.click();
+            URL.revokeObjectURL(url);
+            const aiHeader = resp.headers.get('X-AI-Used');
+            const aiActual = aiHeader === 'true';
+            const aiRequested = document.getElementById('useAi').checked;
+            let aiTag;
+            if (aiActual) {
+                aiTag = '<span class="badge bg-primary ms-2"><i class="bi bi-robot"></i> CIRCUIT AI classified</span>';
+            } else if (aiRequested) {
+                aiTag = '<span class="badge bg-warning text-dark ms-2"><i class="bi bi-exclamation-triangle"></i> AI unavailable, used default</span>';
+            } else {
+                aiTag = '<span class="badge bg-secondary ms-2">Default classification (no AI)</span>';
+            }
+            status.innerHTML = '<span class="text-success">✓ Download complete!</span>' + aiTag;
+            // Reset drop zone for next upload
+            resetDropZone();
+            // Refresh history
+            loadHistory();
+        } else {
+            const err = await resp.json();
+            status.innerHTML = '<span class="text-danger">Error: ' + (err.error || 'Unknown error') + '</span>';
+        }
+    } catch(e) {
+        if (e.name === 'AbortError') {
+            status.innerHTML = '<span class="text-danger">Request timed out (>5 min). Try unchecking AI classification for faster processing.</span>';
+        } else {
+            status.innerHTML = '<span class="text-danger">Network error: ' + e.message + '. Check if the server is running.</span>';
+        }
+    }
+    btn.disabled = false;
+});
+
+// --- History ---
+async function loadHistory() {
+    try {
+        const resp = await fetch('/transform/history');
+        const data = await resp.json();
+        const tbody = document.getElementById('historyBody');
+        const table = document.getElementById('historyTable');
+        const empty = document.getElementById('historyEmpty');
+
+        if (!data.length) {
+            table.style.display = 'none';
+            empty.style.display = 'block';
+            return;
+        }
+        empty.style.display = 'none';
+        table.style.display = 'table';
+        tbody.innerHTML = '';
+
+        data.forEach(pair => {
+            const src = pair.source;
+            const out = pair.output;
+            const tr = document.createElement('tr');
+            const time = src ? src.time : (out ? out.time : '');
+
+            tr.innerHTML = `
+                <td class="text-nowrap"><small>${time}</small></td>
+                <td>
+                    ${src ? `<a href="#" class="text-decoration-none" onclick="previewFile('${src.name}');return false;">
+                        <i class="bi bi-file-earmark-excel text-success"></i> ${src.name}
+                    </a> <small class="text-muted">(${src.size_kb} KB)</small>` : '<span class="text-muted">-</span>'}
+                </td>
+                <td>
+                    ${out ? `<a href="#" class="text-decoration-none" onclick="previewFile('${out.name}');return false;">
+                        <i class="bi bi-file-earmark-excel text-primary"></i> ${out.name}
+                    </a> <small class="text-muted">(${out.size_kb} KB)</small>` : '<span class="text-muted">-</span>'}
+                </td>
+                <td>
+                    ${src ? `<button class="btn btn-outline-danger btn-sm py-0 px-1" title="Delete" onclick="deleteFile('${src.name}')">
+                        <i class="bi bi-trash"></i>
+                    </button>` : ''}
+                </td>`;
+            tbody.appendChild(tr);
+        });
+    } catch(e) {
+        console.error('Failed to load history:', e);
+    }
+}
+
+async function previewFile(filename) {
+    const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+    document.getElementById('previewTitle').textContent = filename;
+    document.getElementById('previewBody').innerHTML =
+        '<div class="text-center py-4"><span class="spinner-border"></span><p class="mt-2">Loading preview...</p></div>';
+    document.getElementById('previewDownloadBtn').href = '/transform/files/' + encodeURIComponent(filename);
+    document.getElementById('previewInfo').textContent = '';
+    modal.show();
+
+    try {
+        const resp = await fetch('/transform/preview/' + encodeURIComponent(filename));
+        const data = await resp.json();
+        if (data.error) {
+            document.getElementById('previewBody').innerHTML =
+                '<div class="alert alert-danger">' + data.error + '</div>';
+            return;
+        }
+        document.getElementById('previewBody').innerHTML =
+            '<div class="table-responsive" style="max-height:60vh;overflow:auto;font-size:0.8rem;">' + data.html + '</div>';
+        document.getElementById('previewInfo').textContent =
+            `Showing ${data.rows} row${data.rows > 1 ? 's' : ''} (max 50)`;
+    } catch(e) {
+        document.getElementById('previewBody').innerHTML =
+            '<div class="alert alert-danger">Failed to load preview: ' + e.message + '</div>';
+    }
+}
+
+async function deleteFile(filename) {
+    if (!confirm('Delete this file and its pair?')) return;
+    try {
+        await fetch('/transform/files/' + encodeURIComponent(filename), { method: 'DELETE' });
+        loadHistory();
+    } catch(e) {
+        alert('Delete failed: ' + e.message);
+    }
+}
+
+// Load history on page load
+document.addEventListener('DOMContentLoaded', loadHistory);
+</script>
+{% endblock %}
+

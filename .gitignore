@@ -22,6 +22,9 @@ env/
 instance/
 backups/
 
+# Transform files
+transform_files/
+
 # Logs
 logs/
 

@@ -37,6 +37,9 @@ class Config:
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Upload limit (100 MB)
+    MAX_CONTENT_LENGTH = 100 * 1024 * 1024
+
     # Session
     PERMANENT_SESSION_LIFETIME = 28800  # 8 hours
 
