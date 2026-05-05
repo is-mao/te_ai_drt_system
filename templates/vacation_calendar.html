@@ -7,6 +7,9 @@
     <div class="sticky-row-1">
         <h5 class="sticky-title"><i class="bi bi-calendar3-week me-2"></i>Vacation Calendar Planner</h5>
         <div class="d-flex align-items-center gap-3">
+            <button class="btn btn-sm vacation-export-btn" id="exportPlanBtn" title="Export plan summary">
+                <i class="bi bi-file-earmark-bar-graph me-1"></i>Export
+            </button>
             <span class="vacation-sel-badge" id="selectedCountBadge">0 selected</span>
             <button class="btn btn-sm vacation-clear-btn" id="clearSelectionBtn" title="Clear selection">
                 <i class="bi bi-eraser-fill"></i> Clear
@@ -41,6 +44,27 @@
 </div>
 
 <div id="vacationCalendarContainer"></div>
+
+<!-- Export Plans Modal -->
+<div class="modal fade" id="exportPlansModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header py-2" style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: #fff;">
+                <h6 class="modal-title mb-0"><i class="bi bi-file-earmark-bar-graph me-1"></i>Vacation Plan Summary</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0" id="exportModalBody">
+                <!-- filled by JS -->
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success btn-sm" id="downloadExcelBtn">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>Download Excel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Delete Plans Modal -->
 <div class="modal fade" id="deletePlansModal" tabindex="-1" aria-hidden="true">
@@ -639,6 +663,177 @@
             closeContextMenu();
         }
     });
+
+    // ---- Export Plan Summary ----
+    function buildPlanSummary() {
+        const planned = [];
+        Object.keys(holidayMap).forEach(function (dateKey) {
+            holidayMap[dateKey].forEach(function (evt) {
+                if (evt.type !== 'public' && evt.id) {
+                    planned.push({ date: dateKey, title: evt.title, country: evt.country });
+                }
+            });
+        });
+        if (!planned.length) return { years: [], segments: [] };
+
+        planned.sort(function (a, b) { return a.date.localeCompare(b.date); });
+
+        // Group into contiguous segments
+        const segments = [];
+        let seg = { start: planned[0].date, end: planned[0].date, title: planned[0].title, dates: [planned[0].date] };
+        for (let i = 1; i < planned.length; i++) {
+            const prev = new Date(seg.end + 'T00:00:00');
+            const cur = new Date(planned[i].date + 'T00:00:00');
+            const diffDays = (cur - prev) / 86400000;
+            if (diffDays <= 1) {
+                seg.end = planned[i].date;
+                seg.dates.push(planned[i].date);
+            } else {
+                segments.push(seg);
+                seg = { start: planned[i].date, end: planned[i].date, title: planned[i].title, dates: [planned[i].date] };
+            }
+        }
+        segments.push(seg);
+
+        // Enrich each segment
+        const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        segments.forEach(function (s) {
+            const sd = new Date(s.start + 'T00:00:00');
+            const ed = new Date(s.end + 'T00:00:00');
+            s.days = s.dates.length;
+            s.year = sd.getFullYear();
+            s.startDay = dayNames[sd.getDay()];
+            s.endDay = dayNames[ed.getDay()];
+
+            let weekends = 0;
+            s.dates.forEach(function (d) {
+                const dow = new Date(d + 'T00:00:00').getDay();
+                if (dow === 0 || dow === 6) weekends++;
+            });
+            s.weekends = weekends;
+
+            const holidays = [];
+            s.dates.forEach(function (d) {
+                (holidayMap[d] || []).forEach(function (evt) {
+                    if (evt.type === 'public') {
+                        const key = evt.country + ':' + evt.title;
+                        if (!holidays.some(function (h) { return h.key === key; })) {
+                            holidays.push({ key: key, country: evt.country, title: evt.title, count: 0 });
+                        }
+                        holidays.find(function (h) { return h.key === key; }).count++;
+                    }
+                });
+            });
+            s.holidays = holidays;
+            s.publicDays = 0;
+            const countedDates = new Set();
+            s.dates.forEach(function (d) {
+                (holidayMap[d] || []).forEach(function (evt) {
+                    if (evt.type === 'public' && !countedDates.has(d)) {
+                        countedDates.add(d);
+                        s.publicDays++;
+                    }
+                });
+            });
+            s.annualLeave = Math.max(0, s.days - s.weekends - s.publicDays);
+        });
+
+        const byYear = {};
+        segments.forEach(function (s) {
+            if (!byYear[s.year]) byYear[s.year] = [];
+            byYear[s.year].push(s);
+        });
+
+        return { years: Object.keys(byYear).sort(), byYear: byYear, segments: segments };
+    }
+
+    function renderExportModal() {
+        const summary = buildPlanSummary();
+        if (!summary.segments || !summary.segments.length) {
+            document.getElementById('exportModalBody').innerHTML =
+                '<div class="p-4 text-center text-muted">No vacation plans found.</div>';
+            new bootstrap.Modal(document.getElementById('exportPlansModal')).show();
+            return;
+        }
+
+        let html = '';
+        summary.years.forEach(function (year) {
+            const segs = summary.byYear[year];
+            const totalDays = segs.reduce(function (s, sg) { return s + sg.days; }, 0);
+            const totalLeave = segs.reduce(function (s, sg) { return s + sg.annualLeave; }, 0);
+
+            html += '<div class="export-year-section">';
+            html += '<div class="export-year-header">' +
+                '<span class="export-year-title">' + year + '</span>' +
+                '<span class="export-year-stats">' + segs.length + ' trips &middot; ' + totalDays + ' days &middot; ~' + totalLeave + ' annual leave</span>' +
+                '</div>';
+            html += '<table class="table table-sm table-hover mb-0 export-table">';
+            html += '<thead><tr><th>#</th><th>Date Range</th><th>Days</th><th>Holidays Covered</th><th>Leave</th></tr></thead><tbody>';
+
+            segs.forEach(function (s, idx) {
+                const holidayStr = s.holidays.length
+                    ? s.holidays.map(function (h) {
+                        return '<span class="badge export-badge-' + h.country.toLowerCase() + '">' + h.country + '</span> ' + escapeHtml(h.title) + ' (' + h.count + 'd)';
+                    }).join('<br>')
+                    : '<span class="text-muted">\u2014</span>';
+                html += '<tr>' +
+                    '<td>' + (idx + 1) + '</td>' +
+                    '<td class="text-nowrap"><strong>' + s.start + '</strong> <span class="text-muted">(' + s.startDay + ')</span><br>\u2192 <strong>' + s.end + '</strong> <span class="text-muted">(' + s.endDay + ')</span></td>' +
+                    '<td class="text-center"><strong>' + s.days + '</strong><br><small class="text-muted">' + s.weekends + ' wknd</small></td>' +
+                    '<td class="small">' + holidayStr + '</td>' +
+                    '<td class="text-center"><strong>~' + s.annualLeave + '</strong></td>' +
+                    '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+        });
+
+        const grandDays = summary.segments.reduce(function (s, sg) { return s + sg.days; }, 0);
+        const grandLeave = summary.segments.reduce(function (s, sg) { return s + sg.annualLeave; }, 0);
+        html += '<div class="export-grand-total">Total: ' + summary.segments.length + ' trips, ' + grandDays + ' days off, ~' + grandLeave + ' annual leave needed</div>';
+
+        document.getElementById('exportModalBody').innerHTML = html;
+        new bootstrap.Modal(document.getElementById('exportPlansModal')).show();
+    }
+
+    function downloadExcel() {
+        const summary = buildPlanSummary();
+        if (!summary.segments || !summary.segments.length) return;
+
+        const rows = [['Year','Trip #','Start Date','Start Day','End Date','End Day','Total Days','Weekends','Public Holidays','Annual Leave','Holidays Covered']];
+        let tripNum = 0;
+        let currentYear = null;
+        summary.segments.forEach(function (s) {
+            if (s.year !== currentYear) { tripNum = 0; currentYear = s.year; }
+            tripNum++;
+            const coveredStr = s.holidays.map(function (h) { return '[' + h.country + '] ' + h.title + ' (' + h.count + 'd)'; }).join('; ');
+            rows.push([s.year, tripNum, s.start, s.startDay, s.end, s.endDay, s.days, s.weekends, s.publicDays, s.annualLeave, coveredStr]);
+        });
+
+        const bom = '\uFEFF';
+        const csv = bom + rows.map(function (row) {
+            return row.map(function (cell) {
+                const str = String(cell);
+                return str.includes(',') || str.includes('"') || str.includes('\n')
+                    ? '"' + str.replace(/"/g, '""') + '"'
+                    : str;
+            }).join(',');
+        }).join('\r\n');
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'vacation_plan_' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Downloaded CSV file', 'success');
+    }
+
+    document.getElementById('exportPlanBtn').addEventListener('click', renderExportModal);
+    document.getElementById('downloadExcelBtn').addEventListener('click', downloadExcel);
 
     loadCalendar();
 })();

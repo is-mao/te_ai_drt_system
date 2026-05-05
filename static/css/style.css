@@ -1150,6 +1150,113 @@ tr.row-highlight td {
     background: #fff5f5;
 }
 
+.vacation-export-btn {
+    padding: 4px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 20px;
+    color: var(--primary-dark);
+    border: 1px solid var(--primary);
+    background: var(--primary-surface);
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: all 0.15s;
+}
+
+.vacation-export-btn:hover {
+    color: #fff;
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+/* Export Modal */
+.export-year-section {
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.export-year-section:last-of-type {
+    border-bottom: none;
+}
+
+.export-year-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 1.25rem;
+    background: linear-gradient(90deg, var(--primary-surface) 0%, transparent 100%);
+    border-left: 4px solid var(--primary);
+}
+
+.export-year-title {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--primary-dark);
+}
+
+.export-year-stats {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.export-table {
+    font-size: 0.8rem;
+    margin: 0;
+}
+
+.export-table thead th {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--gray-200);
+    padding: 0.4rem 0.75rem;
+    white-space: nowrap;
+}
+
+.export-table tbody td {
+    padding: 0.5rem 0.75rem;
+    vertical-align: middle;
+}
+
+.export-badge-cn {
+    background: #e53935;
+    color: #fff;
+    font-size: 0.6rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+}
+
+.export-badge-vn {
+    background: #43a047;
+    color: #fff;
+    font-size: 0.6rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+}
+
+.export-badge-custom {
+    background: #1e88e5;
+    color: #fff;
+    font-size: 0.6rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+}
+
+.export-grand-total {
+    padding: 0.75rem 1.25rem;
+    background: var(--primary-dark);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-align: center;
+    letter-spacing: 0.3px;
+}
+
 .vacation-legend {
     display: flex;
     flex-wrap: wrap;
