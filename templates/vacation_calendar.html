@@ -3,55 +3,41 @@
 {% block title %}Vacation Calendar - DRT System{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div>
-        <h4><i class="bi bi-calendar3-week me-2" style="color: var(--primary);"></i>Vacation Calendar Planner</h4>
-        <div class="page-subtitle">CN + VN holidays, monthly layout for full years, with range selection and right-click planning.</div>
-    </div>
-</div>
-
-<div class="card filter-card mb-4 vacation-control-card">
-    <div class="card-body">
-        <div class="row g-3 align-items-end">
-            <div class="col-md-2 col-sm-6">
-                <label class="form-label">Start Year</label>
-                <select class="form-select form-select-sm" id="startYearSelect">
-                    {% for year in years %}
-                    <option value="{{ year }}" {% if year == default_start %}selected{% endif %}>{{ year }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2 col-sm-6">
-                <label class="form-label">End Year</label>
-                <select class="form-select form-select-sm" id="endYearSelect">
-                    {% for year in years %}
-                    <option value="{{ year }}" {% if year == default_end %}selected{% endif %}>{{ year }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2 col-sm-6">
-                <button class="btn btn-primary btn-sm w-100" id="loadCalendarBtn">
-                    <i class="bi bi-arrow-repeat me-1"></i>Load Range
-                </button>
-            </div>
-            <div class="col-md-6 col-sm-12">
-                <div class="vacation-legend">
-                    <span class="legend-item"><span class="legend-dot dot-cn"></span>CN Public</span>
-                    <span class="legend-item"><span class="legend-dot dot-vn"></span>VN Public</span>
-                    <span class="legend-item"><span class="legend-dot dot-planned"></span>Planned</span>
-                    <span class="legend-item"><span class="legend-dot dot-selected"></span>Selected</span>
-                </div>
-            </div>
+<div class="vacation-sticky-bar">
+    <div class="sticky-row-1">
+        <h5 class="sticky-title"><i class="bi bi-calendar3-week me-2"></i>Vacation Calendar Planner</h5>
+        <div class="d-flex align-items-center gap-3">
+            <span class="vacation-sel-badge" id="selectedCountBadge">0 selected</span>
+            <button class="btn btn-sm vacation-clear-btn" id="clearSelectionBtn" title="Clear selection">
+                <i class="bi bi-eraser-fill"></i> Clear
+            </button>
         </div>
     </div>
-</div>
-
-<div class="mb-3 d-flex align-items-center gap-3">
-    <span class="text-muted small">Tip: drag across dates to multi-select, then right-click to add holiday plan.</span>
-    <span class="badge bg-secondary" id="selectedCountBadge">Selected: 0</span>
-    <button class="btn btn-outline-secondary btn-sm" id="clearSelectionBtn" title="Clear selection and reload">
-        <i class="bi bi-x-circle me-1"></i>Clear Selection
-    </button>
+    <div class="sticky-row-2">
+        <div class="d-flex align-items-center gap-2">
+            <label class="form-label mb-0 small fw-semibold text-muted">Start Year</label>
+            <select class="form-select form-select-sm" id="startYearSelect" style="width:90px;">
+                {% for year in years %}
+                <option value="{{ year }}" {% if year == default_start %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+            </select>
+            <label class="form-label mb-0 small fw-semibold text-muted">End Year</label>
+            <select class="form-select form-select-sm" id="endYearSelect" style="width:90px;">
+                {% for year in years %}
+                <option value="{{ year }}" {% if year == default_end %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn-primary btn-sm px-3" id="loadCalendarBtn">
+                <i class="bi bi-arrow-repeat me-1"></i>Load
+            </button>
+        </div>
+        <div class="vacation-legend">
+            <span class="legend-item"><span class="legend-dot dot-cn"></span>CN Public</span>
+            <span class="legend-item"><span class="legend-dot dot-vn"></span>VN Public</span>
+            <span class="legend-item"><span class="legend-dot dot-planned"></span>Planned</span>
+            <span class="legend-item"><span class="legend-dot dot-selected"></span>Selected</span>
+        </div>
+    </div>
 </div>
 
 <div id="vacationCalendarContainer"></div>
@@ -235,13 +221,15 @@
     const selectedDates = new Set();
     const holidayMap = {};
     let isMouseSelecting = false;
+    let dragStartDate = null;
 
     function asKey(year, month, day) {
         return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     }
 
     function updateSelectedBadge() {
-        selectedCountBadge.textContent = 'Selected: ' + selectedDates.size;
+        selectedCountBadge.textContent = selectedDates.size + ' selected';
+        selectedCountBadge.classList.toggle('has-selection', selectedDates.size > 0);
     }
 
     function closeContextMenu() {
@@ -314,18 +302,27 @@
         });
     }
 
-    function toggleDateSelection(dateKey) {
-        if (selectedDates.has(dateKey)) {
-            selectedDates.delete(dateKey);
-        } else {
-            selectedDates.add(dateKey);
+    function dateRange(startKey, endKey) {
+        const s = new Date(startKey + 'T00:00:00');
+        const e = new Date(endKey + 'T00:00:00');
+        const from = s <= e ? s : e;
+        const to = s <= e ? e : s;
+        const result = [];
+        const cur = new Date(from);
+        while (cur <= to) {
+            result.push(cur.getFullYear() + '-' +
+                String(cur.getMonth() + 1).padStart(2, '0') + '-' +
+                String(cur.getDate()).padStart(2, '0'));
+            cur.setDate(cur.getDate() + 1);
         }
-        updateSelectedBadge();
+        return result;
     }
 
-    function addDateSelection(dateKey) {
-        selectedDates.add(dateKey);
+    function setContiguousSelection(startKey, endKey) {
+        selectedDates.clear();
+        dateRange(startKey, endKey).forEach(function (d) { selectedDates.add(d); });
         updateSelectedBadge();
+        refreshSelectionClasses();
     }
 
     function buildMonthGrid(year, month) {
@@ -386,14 +383,16 @@
                 if (event.button !== 0) return;
                 closeContextMenu();
                 isMouseSelecting = true;
-                toggleDateSelection(cell.dataset.date);
-                cell.classList.toggle('selected', selectedDates.has(cell.dataset.date));
+                dragStartDate = cell.dataset.date;
+                selectedDates.clear();
+                selectedDates.add(dragStartDate);
+                updateSelectedBadge();
+                refreshSelectionClasses();
             });
 
             cell.addEventListener('mouseenter', function () {
-                if (!isMouseSelecting) return;
-                addDateSelection(cell.dataset.date);
-                cell.classList.add('selected');
+                if (!isMouseSelecting || !dragStartDate) return;
+                setContiguousSelection(dragStartDate, cell.dataset.date);
             });
 
             cell.addEventListener('contextmenu', function (event) {
@@ -410,9 +409,17 @@
     }
 
     function showContextMenu(x, y) {
+        contextMenu.classList.remove('d-none');
+        const menuW = contextMenu.offsetWidth;
+        const menuH = contextMenu.offsetHeight;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        if (x + menuW > vw) x = vw - menuW - 8;
+        if (y + menuH > vh) y = vh - menuH - 8;
+        if (x < 0) x = 8;
+        if (y < 0) y = 8;
         contextMenu.style.left = x + 'px';
         contextMenu.style.top = y + 'px';
-        contextMenu.classList.remove('d-none');
     }
 
     function clearHolidayMap() {
@@ -530,6 +537,7 @@
 
     document.addEventListener('mouseup', function () {
         isMouseSelecting = false;
+        dragStartDate = null;
     });
 
     document.addEventListener('click', function (event) {
@@ -550,6 +558,12 @@
     function openDeleteModal(dateKey) {
         const events = (holidayMap[dateKey] || []).filter(function (e) { return e.type !== 'public' && e.id; });
         if (!events.length) return;
+
+        // Single plan → delete directly without modal
+        if (events.length === 1) {
+            directDeletePlans([events[0].id]);
+            return;
+        }
 
         document.getElementById('delModalDateLabel').textContent = dateKey;
         const listEl = document.getElementById('delPlansList');
@@ -591,12 +605,7 @@
         }
     });
 
-    document.getElementById('delConfirmBtn').addEventListener('click', async function () {
-        const ids = Array.from(document.querySelectorAll('.del-plan-cb:checked')).map(function (cb) {
-            return Number(cb.value);
-        });
-        if (!ids.length) return;
-
+    async function directDeletePlans(ids) {
         try {
             const resp = await fetch('/api/vacation/plans/bulk-delete', {
                 method: 'POST',
@@ -612,9 +621,17 @@
         } catch (err) {
             showToast(err.message, 'danger');
         }
+        await loadCalendar();
+    }
+
+    document.getElementById('delConfirmBtn').addEventListener('click', async function () {
+        const ids = Array.from(document.querySelectorAll('.del-plan-cb:checked')).map(function (cb) {
+            return Number(cb.value);
+        });
+        if (!ids.length) return;
 
         bootstrap.Modal.getInstance(document.getElementById('deletePlansModal')).hide();
-        await loadCalendar();
+        await directDeletePlans(ids);
     });
 
     document.addEventListener('contextmenu', function (event) {
