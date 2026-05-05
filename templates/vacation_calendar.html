@@ -1,0 +1,629 @@
+{% extends "base.html" %}
+
+{% block title %}Vacation Calendar - DRT System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h4><i class="bi bi-calendar3-week me-2" style="color: var(--primary);"></i>Vacation Calendar Planner</h4>
+        <div class="page-subtitle">CN + VN holidays, monthly layout for full years, with range selection and right-click planning.</div>
+    </div>
+</div>
+
+<div class="card filter-card mb-4 vacation-control-card">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-2 col-sm-6">
+                <label class="form-label">Start Year</label>
+                <select class="form-select form-select-sm" id="startYearSelect">
+                    {% for year in years %}
+                    <option value="{{ year }}" {% if year == default_start %}selected{% endif %}>{{ year }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 col-sm-6">
+                <label class="form-label">End Year</label>
+                <select class="form-select form-select-sm" id="endYearSelect">
+                    {% for year in years %}
+                    <option value="{{ year }}" {% if year == default_end %}selected{% endif %}>{{ year }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 col-sm-6">
+                <button class="btn btn-primary btn-sm w-100" id="loadCalendarBtn">
+                    <i class="bi bi-arrow-repeat me-1"></i>Load Range
+                </button>
+            </div>
+            <div class="col-md-6 col-sm-12">
+                <div class="vacation-legend">
+                    <span class="legend-item"><span class="legend-dot dot-cn"></span>CN Public</span>
+                    <span class="legend-item"><span class="legend-dot dot-vn"></span>VN Public</span>
+                    <span class="legend-item"><span class="legend-dot dot-planned"></span>Planned</span>
+                    <span class="legend-item"><span class="legend-dot dot-selected"></span>Selected</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mb-3 d-flex align-items-center gap-3">
+    <span class="text-muted small">Tip: drag across dates to multi-select, then right-click to add holiday plan.</span>
+    <span class="badge bg-secondary" id="selectedCountBadge">Selected: 0</span>
+    <button class="btn btn-outline-secondary btn-sm" id="clearSelectionBtn" title="Clear selection and reload">
+        <i class="bi bi-x-circle me-1"></i>Clear Selection
+    </button>
+</div>
+
+<div id="vacationCalendarContainer"></div>
+
+<!-- Delete Plans Modal -->
+<div class="modal fade" id="deletePlansModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header py-2" style="background: linear-gradient(135deg, var(--danger) 0%, #b71c1c 100%); color: #fff;">
+                <h6 class="modal-title mb-0"><i class="bi bi-trash3 me-1"></i>Delete Plans</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted small" id="delModalDateLabel"></span>
+                    <label class="form-check form-check-inline mb-0" style="font-size:0.78rem;">
+                        <input class="form-check-input" type="checkbox" id="delSelectAll">
+                        <span class="form-check-label">Select All</span>
+                    </label>
+                </div>
+                <div id="delPlansList"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" id="delConfirmBtn">
+                    <i class="bi bi-trash3 me-1"></i>Delete Selected (<span id="delSelectedCount">0</span>)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="vacationContextMenu" class="vacation-context-menu d-none">
+    <div class="context-menu-header">Add Holiday Plan</div>
+    <div class="context-menu-body">
+        <div class="mb-2">
+            <label class="form-label">Title</label>
+            <input type="text" class="form-control form-control-sm" id="ctxTitleInput" placeholder="e.g. Team Offsite / Annual Leave">
+        </div>
+        <div class="row g-2 mb-2">
+            <div class="col-6">
+                <label class="form-label">Country</label>
+                <select class="form-select form-select-sm" id="ctxCountrySelect">
+                    <option value="CUSTOM">Custom</option>
+                    <option value="CN">CN</option>
+                    <option value="VN">VN</option>
+                </select>
+            </div>
+            <div class="col-6">
+                <label class="form-label">Type</label>
+                <select class="form-select form-select-sm" id="ctxTypeSelect">
+                    <option value="planned">Planned</option>
+                    <option value="leave">Leave</option>
+                    <option value="trip">Trip</option>
+                    <option value="public">Public</option>
+                </select>
+            </div>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Note</label>
+            <textarea class="form-control form-control-sm" id="ctxNoteInput" rows="2" placeholder="Optional note"></textarea>
+        </div>
+        <button class="btn btn-success btn-sm w-100" id="ctxSaveBtn">
+            <i class="bi bi-save me-1"></i>Save for Selected Dates
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    /* ====== Lunar Calendar (农历) Module ====== */
+    const Lunar = (function () {
+        // Compressed lunar data 1900-2100. Each entry encodes month lengths + leap month info.
+        const lunarInfo = [
+            0x04bd8,0x04ae0,0x0a570,0x054d5,0x0d260,0x0d950,0x16554,0x056a0,0x09ad0,0x055d2,
+            0x04ae0,0x0a5b6,0x0a4d0,0x0d250,0x1d255,0x0b540,0x0d6a0,0x0ada2,0x095b0,0x14977,
+            0x04970,0x0a4b0,0x0b4b5,0x06a50,0x06d40,0x1ab54,0x02b60,0x09570,0x052f2,0x04970,
+            0x06566,0x0d4a0,0x0ea50,0x06e95,0x05ad0,0x02b60,0x186e3,0x092e0,0x1c8d7,0x0c950,
+            0x0d4a0,0x1d8a6,0x0b550,0x056a0,0x1a5b4,0x025d0,0x092d0,0x0d2b2,0x0a950,0x0b557,
+            0x06ca0,0x0b550,0x15355,0x04da0,0x0a5b0,0x14573,0x052b0,0x0a9a8,0x0e950,0x06aa0,
+            0x0aea6,0x0ab50,0x04b60,0x0aae4,0x0a570,0x05260,0x0f263,0x0d950,0x05b57,0x056a0,
+            0x096d0,0x04dd5,0x04ad0,0x0a4d0,0x0d4d4,0x0d250,0x0d558,0x0b540,0x0b6a0,0x195a6,
+            0x095b0,0x049b0,0x0a974,0x0a4b0,0x0b27a,0x06a50,0x06d40,0x0af46,0x0ab60,0x09570,
+            0x04af5,0x04970,0x064b0,0x074a3,0x0ea50,0x06b58,0x05ac0,0x0ab60,0x096d5,0x092e0,
+            0x0c960,0x0d954,0x0d4a0,0x0da50,0x07552,0x056a0,0x0abb7,0x025d0,0x092d0,0x0cab5,
+            0x0a950,0x0b4a0,0x0baa4,0x0ad50,0x055d9,0x04ba0,0x0a5b0,0x15176,0x052b0,0x0a930,
+            0x07954,0x06aa0,0x0ad50,0x05b52,0x04b60,0x0a6e6,0x0a4e0,0x0d260,0x0ea65,0x0d530,
+            0x05aa0,0x076a3,0x096d0,0x04afb,0x04ad0,0x0a4d0,0x1d0b6,0x0d250,0x0d520,0x0dd45,
+            0x0b5a0,0x056d0,0x055b2,0x049b0,0x0a577,0x0a4b0,0x0aa50,0x1b255,0x06d20,0x0ada0,
+            0x14b63,0x09370,0x049f8,0x04970,0x064b0,0x168a6,0x0ea50,0x06b20,0x1a6c4,0x0aae0,
+            0x092e0,0x0d2e3,0x0c960,0x0d557,0x0d4a0,0x0da50,0x05d55,0x056a0,0x0a6d0,0x055d4,
+            0x052d0,0x0a9b8,0x0a950,0x0b4a0,0x0b6a6,0x0ad50,0x055a0,0x0aba4,0x0a5b0,0x052b0,
+            0x0b273,0x06930,0x07337,0x06aa0,0x0ad50,0x14b55,0x04b60,0x0a570,0x054e4,0x0d160,
+            0x0e968,0x0d520,0x0daa0,0x16aa6,0x056d0,0x04ae0,0x0a9d4,0x0a4d0,0x0d150,0x0f252,
+            0x0d520
+        ];
+
+        const tianGan = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸'];
+        const diZhi = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
+        const lunarMonthNames = ['正','二','三','四','五','六','七','八','九','十','冬','腊'];
+        const lunarDayNames = [
+            '初一','初二','初三','初四','初五','初六','初七','初八','初九','初十',
+            '十一','十二','十三','十四','十五','十六','十七','十八','十九','二十',
+            '廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'
+        ];
+
+        function leapMonth(y) { return lunarInfo[y - 1900] & 0xf; }
+        function leapDays(y) { return leapMonth(y) ? ((lunarInfo[y - 1900] & 0x10000) ? 30 : 29) : 0; }
+        function monthDays(y, m) { return (lunarInfo[y - 1900] & (0x10000 >> m)) ? 30 : 29; }
+        function yearDays(y) {
+            let sum = 348;
+            for (let i = 0x8000; i > 0x8; i >>= 1) sum += (lunarInfo[y - 1900] & i) ? 1 : 0;
+            return sum + leapDays(y);
+        }
+
+        function solar2lunar(sy, sm, sd) {
+            const baseDate = new Date(1900, 0, 31);
+            const objDate = new Date(sy, sm - 1, sd);
+            let offset = Math.floor((objDate - baseDate) / 86400000);
+
+            let ly = 1900;
+            for (; ly < 2101 && offset > 0; ly++) offset -= yearDays(ly);
+            if (offset < 0) { offset += yearDays(--ly); }
+
+            const leap = leapMonth(ly);
+            let isLeap = false;
+            let lm = 1;
+
+            for (; lm < 13 && offset > 0; lm++) {
+                if (leap > 0 && lm === (leap + 1) && !isLeap) {
+                    --lm;
+                    isLeap = true;
+                    const d = leapDays(ly);
+                    if (offset < d) break;
+                    offset -= d;
+                    isLeap = false;
+                } else {
+                    const d = monthDays(ly, lm);
+                    if (offset < d) break;
+                    offset -= d;
+                }
+            }
+
+            if (leap > 0 && lm === leap + 1 && !isLeap) { lm--; isLeap = true; }
+
+            const ld = offset + 1;
+            const ganIdx = (ly - 4) % 10;
+            const zhiIdx = (ly - 4) % 12;
+
+            return {
+                lunarYear: ly,
+                lunarMonth: lm,
+                lunarDay: ld,
+                isLeap: isLeap,
+                monthStr: (isLeap ? '闰' : '') + lunarMonthNames[lm - 1] + '月',
+                dayStr: lunarDayNames[ld - 1],
+                ganZhi: tianGan[ganIdx] + diZhi[zhiIdx] + '年'
+            };
+        }
+
+        function getLunarDayText(sy, sm, sd) {
+            const info = solar2lunar(sy, sm, sd);
+            return info.lunarDay === 1 ? info.monthStr : info.dayStr;
+        }
+
+        return { solar2lunar, getLunarDayText };
+    })();
+
+    /* ====== Calendar Main ====== */
+    const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    const calendarContainer = document.getElementById('vacationCalendarContainer');
+    const selectedCountBadge = document.getElementById('selectedCountBadge');
+    const contextMenu = document.getElementById('vacationContextMenu');
+
+    const selectedDates = new Set();
+    const holidayMap = {};
+    let isMouseSelecting = false;
+
+    function asKey(year, month, day) {
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+
+    function updateSelectedBadge() {
+        selectedCountBadge.textContent = 'Selected: ' + selectedDates.size;
+    }
+
+    function closeContextMenu() {
+        contextMenu.classList.add('d-none');
+    }
+
+    function tooltipHtml(events, year, month, day) {
+        const lunar = Lunar.solar2lunar(year, month, day);
+        const lunarHeader = `<div class="tip-lunar">${lunar.ganZhi} ${lunar.monthStr}${lunar.dayStr}</div>`;
+        const hasPlanned = events.some(function (evt) { return evt.type !== 'public' && evt.id; });
+        const lines = events.map(function (evt) {
+            const dotCls = evt.type === 'public'
+                ? (evt.country === 'CN' ? 'cn' : 'vn')
+                : 'planned';
+            const label = evt.type === 'public'
+                ? `[${evt.country}] ${evt.title}`
+                : `${evt.title}`;
+            return `<div class="tip-line"><span class="tip-dot ${dotCls}"></span>${escapeHtml(label)}</div>`;
+        }).join('');
+        const delLink = hasPlanned
+            ? `<div class="tip-del-link" data-date="${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}"><i class="bi bi-trash3"></i> Manage Plans</div>`
+            : '';
+        return `<div class="vac-tooltip">${lunarHeader}${lines}${delLink}</div>`;
+    }
+
+    function dayClasses(key) {
+        const events = holidayMap[key] || [];
+        const cls = [];
+        for (const evt of events) {
+            if (evt.type === 'public' && evt.country === 'CN') cls.push('has-cn');
+            else if (evt.type === 'public' && evt.country === 'VN') cls.push('has-vn');
+            else cls.push('has-planned');
+        }
+        return [...new Set(cls)].join(' ');
+    }
+
+    function dayMetaHtml(key) {
+        const events = holidayMap[key] || [];
+        if (!events.length) return '';
+
+        const parts = key.split('-');
+        const y = parseInt(parts[0]), m = parseInt(parts[1]), d = parseInt(parts[2]);
+
+        const seen = new Set();
+        const dots = events.map(function (evt) {
+            const cls = evt.type === 'public'
+                ? (evt.country === 'CN' ? 'dot-indicator cn' : 'dot-indicator vn')
+                : 'dot-indicator planned';
+            if (seen.has(cls)) return '';
+            seen.add(cls);
+            return `<span class="${cls}"></span>`;
+        }).join('');
+
+        const tip = tooltipHtml(events, y, m, d);
+        return `<div class="day-meta">${dots}</div>${tip}`;
+    }
+
+    function isSameDayInSet(dateKey) {
+        return selectedDates.has(dateKey);
+    }
+
+    function refreshSelectionClasses() {
+        document.querySelectorAll('.vac-day').forEach(function (cell) {
+            const key = cell.dataset.date;
+            if (isSameDayInSet(key)) {
+                cell.classList.add('selected');
+            } else {
+                cell.classList.remove('selected');
+            }
+        });
+    }
+
+    function toggleDateSelection(dateKey) {
+        if (selectedDates.has(dateKey)) {
+            selectedDates.delete(dateKey);
+        } else {
+            selectedDates.add(dateKey);
+        }
+        updateSelectedBadge();
+    }
+
+    function addDateSelection(dateKey) {
+        selectedDates.add(dateKey);
+        updateSelectedBadge();
+    }
+
+    function buildMonthGrid(year, month) {
+        const firstDay = new Date(year, month, 1);
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const offset = (firstDay.getDay() + 6) % 7;
+
+        let html = '<div class="vac-days-grid">';
+        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(function (name) {
+            html += `<div class="vac-weekday">${name}</div>`;
+        });
+
+        for (let i = 0; i < offset; i++) {
+            html += '<div class="vac-empty"></div>';
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const key = asKey(year, month + 1, day);
+            const isSelected = selectedDates.has(key) ? ' selected' : '';
+            const extraCls = dayClasses(key);
+            const lunarText = Lunar.getLunarDayText(year, month + 1, day);
+            const lunarIsMonth = lunarText.includes('月');
+            const lunarCls = lunarIsMonth ? 'lunar-text lunar-month' : 'lunar-text';
+            html += `<div class="vac-day${isSelected} ${extraCls}" data-date="${key}">` +
+                `<span class="day-num">${day}</span>` +
+                `<span class="${lunarCls}">${lunarText}</span>` +
+                dayMetaHtml(key) +
+                '</div>';
+        }
+
+        html += '</div>';
+        return html;
+    }
+
+    function renderCalendar(startYear, endYear) {
+        let html = '';
+        for (let year = startYear; year <= endYear; year++) {
+            html += `<section class="year-section"><div class="year-head">${year}</div><div class="months-grid">`;
+            for (let month = 0; month < 12; month++) {
+                html += '<article class="month-card">';
+                html += `<div class="month-title">${monthNames[month]} ${year}</div>`;
+                html += buildMonthGrid(year, month);
+                html += '</article>';
+            }
+            html += '</div></section>';
+        }
+        calendarContainer.innerHTML = html;
+
+        bindDayEvents();
+        refreshSelectionClasses();
+    }
+
+    function bindDayEvents() {
+        const dayCells = document.querySelectorAll('.vac-day');
+
+        dayCells.forEach(function (cell) {
+            cell.addEventListener('mousedown', function (event) {
+                if (event.button !== 0) return;
+                closeContextMenu();
+                isMouseSelecting = true;
+                toggleDateSelection(cell.dataset.date);
+                cell.classList.toggle('selected', selectedDates.has(cell.dataset.date));
+            });
+
+            cell.addEventListener('mouseenter', function () {
+                if (!isMouseSelecting) return;
+                addDateSelection(cell.dataset.date);
+                cell.classList.add('selected');
+            });
+
+            cell.addEventListener('contextmenu', function (event) {
+                event.preventDefault();
+                const dateKey = cell.dataset.date;
+                if (!selectedDates.size) {
+                    selectedDates.add(dateKey);
+                    updateSelectedBadge();
+                    refreshSelectionClasses();
+                }
+                showContextMenu(event.clientX, event.clientY);
+            });
+        });
+    }
+
+    function showContextMenu(x, y) {
+        contextMenu.style.left = x + 'px';
+        contextMenu.style.top = y + 'px';
+        contextMenu.classList.remove('d-none');
+    }
+
+    function clearHolidayMap() {
+        Object.keys(holidayMap).forEach(function (k) {
+            delete holidayMap[k];
+        });
+    }
+
+    function absorbEvents(events, fallbackType) {
+        events.forEach(function (evt) {
+            const key = evt.date;
+            if (!holidayMap[key]) holidayMap[key] = [];
+            holidayMap[key].push({
+                id: evt.id || null,
+                country: evt.country || 'CUSTOM',
+                type: evt.type || fallbackType,
+                title: evt.title || 'Holiday',
+                note: evt.note || ''
+            });
+        });
+    }
+
+    async function loadEvents(startYear, endYear) {
+        const params = new URLSearchParams({
+            start_year: String(startYear),
+            end_year: String(endYear)
+        });
+        const resp = await fetch('/api/vacation/events?' + params.toString());
+        const data = await resp.json();
+
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to load holiday events');
+        }
+
+        clearHolidayMap();
+        absorbEvents(data.events.public || [], 'public');
+        absorbEvents(data.events.planned || [], 'planned');
+    }
+
+    async function loadCalendar() {
+        const startYear = Number(document.getElementById('startYearSelect').value);
+        const endYear = Number(document.getElementById('endYearSelect').value);
+
+        if (endYear < startYear) {
+            showToast('End year must be >= start year', 'warning');
+            return;
+        }
+
+        try {
+            await loadEvents(startYear, endYear);
+            renderCalendar(startYear, endYear);
+        } catch (error) {
+            showToast(error.message, 'danger');
+        }
+    }
+
+    async function saveSelectedPlan() {
+        if (!selectedDates.size) {
+            showToast('Please select at least one date first', 'warning');
+            return;
+        }
+
+        const title = document.getElementById('ctxTitleInput').value.trim();
+        if (!title) {
+            showToast('Please input a title', 'warning');
+            return;
+        }
+
+        const payload = {
+            dates: Array.from(selectedDates).sort(),
+            title: title,
+            country: document.getElementById('ctxCountrySelect').value,
+            type: document.getElementById('ctxTypeSelect').value,
+            note: document.getElementById('ctxNoteInput').value.trim()
+        };
+
+        try {
+            const resp = await fetch('/api/vacation/plans/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json();
+
+            if (!data.success) {
+                showToast(data.error || 'Failed to save holiday plan', 'danger');
+                return;
+            }
+
+            showToast(data.message || 'Holiday plan saved', 'success');
+            closeContextMenu();
+            selectedDates.clear();
+            updateSelectedBadge();
+
+            await loadCalendar();
+        } catch (error) {
+            showToast(error.message, 'danger');
+        }
+    }
+
+    document.getElementById('loadCalendarBtn').addEventListener('click', function () {
+        loadCalendar();
+    });
+
+    document.getElementById('clearSelectionBtn').addEventListener('click', function () {
+        selectedDates.clear();
+        updateSelectedBadge();
+        closeContextMenu();
+        refreshSelectionClasses();
+    });
+
+    document.getElementById('ctxSaveBtn').addEventListener('click', function () {
+        saveSelectedPlan();
+    });
+
+    document.addEventListener('mouseup', function () {
+        isMouseSelecting = false;
+    });
+
+    document.addEventListener('click', function (event) {
+        // Handle "Manage Plans" link in tooltip → open delete modal
+        const delLink = event.target.closest('.tip-del-link');
+        if (delLink) {
+            event.stopPropagation();
+            const dateKey = delLink.dataset.date;
+            openDeleteModal(dateKey);
+            return;
+        }
+
+        if (!contextMenu.contains(event.target)) {
+            closeContextMenu();
+        }
+    });
+
+    function openDeleteModal(dateKey) {
+        const events = (holidayMap[dateKey] || []).filter(function (e) { return e.type !== 'public' && e.id; });
+        if (!events.length) return;
+
+        document.getElementById('delModalDateLabel').textContent = dateKey;
+        const listEl = document.getElementById('delPlansList');
+        listEl.innerHTML = events.map(function (evt) {
+            return `<div class="form-check del-plan-item">
+                <input class="form-check-input del-plan-cb" type="checkbox" value="${evt.id}" id="delCb${evt.id}" checked>
+                <label class="form-check-label" for="delCb${evt.id}">
+                    <span class="badge bg-primary me-1" style="font-size:0.65rem;">${escapeHtml(evt.country)}</span>
+                    ${escapeHtml(evt.title)}
+                </label>
+            </div>`;
+        }).join('');
+
+        document.getElementById('delSelectAll').checked = true;
+        updateDelCount();
+
+        const modal = new bootstrap.Modal(document.getElementById('deletePlansModal'));
+        modal.show();
+    }
+
+    function updateDelCount() {
+        const checked = document.querySelectorAll('.del-plan-cb:checked');
+        document.getElementById('delSelectedCount').textContent = checked.length;
+        document.getElementById('delConfirmBtn').disabled = checked.length === 0;
+    }
+
+    document.getElementById('delSelectAll').addEventListener('change', function () {
+        const val = this.checked;
+        document.querySelectorAll('.del-plan-cb').forEach(function (cb) { cb.checked = val; });
+        updateDelCount();
+    });
+
+    document.getElementById('deletePlansModal').addEventListener('change', function (event) {
+        if (event.target.classList.contains('del-plan-cb')) {
+            const allCbs = document.querySelectorAll('.del-plan-cb');
+            const allChecked = document.querySelectorAll('.del-plan-cb:checked');
+            document.getElementById('delSelectAll').checked = allCbs.length === allChecked.length;
+            updateDelCount();
+        }
+    });
+
+    document.getElementById('delConfirmBtn').addEventListener('click', async function () {
+        const ids = Array.from(document.querySelectorAll('.del-plan-cb:checked')).map(function (cb) {
+            return Number(cb.value);
+        });
+        if (!ids.length) return;
+
+        try {
+            const resp = await fetch('/api/vacation/plans/bulk-delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                showToast(data.message || 'Deleted', 'success');
+            } else {
+                showToast(data.error || 'Delete failed', 'danger');
+            }
+        } catch (err) {
+            showToast(err.message, 'danger');
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById('deletePlansModal')).hide();
+        await loadCalendar();
+    });
+
+    document.addEventListener('contextmenu', function (event) {
+        if (!event.target.closest('.vac-day')) {
+            closeContextMenu();
+        }
+    });
+
+    loadCalendar();
+})();
+</script>
+{% endblock %}

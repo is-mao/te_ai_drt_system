@@ -32,6 +32,7 @@ def create_app():
     from routes.settings import settings_bp
     from routes.sync import sync_bp
     from routes.transform import transform_bp
+    from routes.vacation_calendar import vacation_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(defects_bp)
@@ -41,6 +42,7 @@ def create_app():
     app.register_blueprint(settings_bp)
     app.register_blueprint(sync_bp)
     app.register_blueprint(transform_bp)
+    app.register_blueprint(vacation_bp)
 
     @app.route("/")
     def index():

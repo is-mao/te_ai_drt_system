@@ -1075,3 +1075,364 @@ tr.row-highlight td {
     to { transform: rotate(360deg); }
 }
 
+/* ---- Vacation Calendar ---- */
+.vacation-control-card {
+    border-left: 4px solid var(--primary);
+    background: linear-gradient(135deg, #f8fcff 0%, #ffffff 100%);
+}
+
+.vacation-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    min-height: 32px;
+    padding: 6px 12px;
+    background: var(--gray-50);
+    border-radius: 8px;
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.legend-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.dot-cn {
+    background: linear-gradient(135deg, #e53935, #c62828);
+}
+
+.dot-vn {
+    background: linear-gradient(135deg, #43a047, #2e7d32);
+}
+
+.dot-planned {
+    background: linear-gradient(135deg, #1e88e5, #1565c0);
+}
+
+.dot-selected {
+    background: linear-gradient(135deg, #ffa726, #ff8f00);
+}
+
+.year-section {
+    margin-bottom: 2rem;
+}
+
+.year-head {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--primary-dark);
+    margin-bottom: 1rem;
+    padding: 8px 16px;
+    background: linear-gradient(90deg, var(--primary-surface) 0%, transparent 100%);
+    border-left: 4px solid var(--primary);
+    border-radius: 0 8px 8px 0;
+    letter-spacing: 0.5px;
+}
+
+.months-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.month-card {
+    background: #ffffff;
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    padding: 0.85rem;
+    transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.month-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
+}
+
+.month-title {
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: #fff;
+    margin: -0.85rem -0.85rem 0.65rem -0.85rem;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    border-radius: 12px 12px 0 0;
+    text-align: center;
+    letter-spacing: 0.3px;
+}
+
+.vac-days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+}
+
+.vac-weekday {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--primary-dark);
+    text-align: center;
+    padding: 4px 0 6px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.vac-empty {
+    min-height: 48px;
+}
+
+.vac-day {
+    min-height: 48px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 3px 4px;
+    position: relative;
+    cursor: crosshair;
+    background: var(--gray-50);
+    transition: all 0.15s ease;
+}
+
+.vac-day:hover {
+    border-color: var(--primary-lighter);
+    background: var(--primary-surface);
+    box-shadow: 0 2px 8px rgba(4, 159, 217, 0.12);
+    transform: scale(1.06);
+    z-index: 2;
+}
+
+.vac-day.selected {
+    background: linear-gradient(135deg, #fff8e1 0%, #fff3cc 100%);
+    border-color: #ffb74d;
+    box-shadow: 0 0 0 2px rgba(255, 143, 0, 0.18);
+}
+
+.vac-day.has-cn {
+    background: var(--gray-50);
+}
+
+.vac-day.has-vn {
+    background: var(--gray-50);
+}
+
+.vac-day.has-cn.has-vn {
+    background: var(--gray-50);
+}
+
+.vac-day.has-planned {
+    background: linear-gradient(135deg, #e3f2fd 0%, #e8eaf6 100%);
+    border-color: #90caf9;
+}
+
+.day-num {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #243447;
+    display: block;
+    text-align: center;
+    line-height: 1.1;
+}
+
+.lunar-text {
+    display: block;
+    text-align: center;
+    font-size: 0.58rem;
+    color: #90a4ae;
+    line-height: 1.2;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.lunar-month {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.day-meta {
+    position: absolute;
+    bottom: 2px;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+}
+
+.dot-indicator {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 0 1.5px #fff, 0 1px 3px rgba(0,0,0,0.18);
+}
+
+.dot-indicator.cn {
+    background: #e53935;
+}
+
+.dot-indicator.vn {
+    background: #43a047;
+}
+
+.dot-indicator.planned {
+    background: #1e88e5;
+}
+
+/* ---- Holiday Tooltip ---- */
+.vac-tooltip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a2e;
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s, visibility 0.15s;
+    min-width: 220px;
+    max-width: 320px;
+    white-space: normal;
+}
+
+.vac-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1a1a2e;
+}
+
+.vac-tooltip .tip-lunar {
+    font-size: 0.72rem;
+    color: #ffcc80;
+    font-weight: 600;
+    padding-bottom: 3px;
+    margin-bottom: 3px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+}
+
+.vac-tooltip .tip-line {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 0;
+}
+
+.vac-tooltip .tip-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.vac-tooltip .tip-dot.cn { background: #ef5350; }
+.vac-tooltip .tip-dot.vn { background: #66bb6a; }
+.vac-tooltip .tip-dot.planned { background: #42a5f5; }
+
+.vac-day:hover .vac-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+.vac-tooltip:hover {
+    opacity: 1;
+    visibility: visible;
+}
+
+.tip-del-link {
+    margin-top: 5px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    color: #ef9a9a;
+    font-size: 0.72rem;
+    cursor: pointer;
+    text-align: center;
+    transition: color 0.15s;
+}
+
+.tip-del-link:hover {
+    color: #ff5252;
+}
+
+.del-plan-item {
+    padding: 6px 8px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    background: var(--gray-50);
+    transition: background 0.1s;
+}
+
+.del-plan-item:hover {
+    background: var(--danger-light);
+}
+
+.del-plan-item .form-check-label {
+    font-size: 0.82rem;
+}
+
+.vacation-context-menu {
+    position: fixed;
+    width: 300px;
+    background: #ffffff;
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+    z-index: 2000;
+    animation: ctxFadeIn 0.15s ease;
+}
+
+@keyframes ctxFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.context-menu-header {
+    padding: 0.7rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: #fff;
+    border-bottom: none;
+    border-radius: 12px 12px 0 0;
+}
+
+.context-menu-body {
+    padding: 0.85rem;
+}
+
+@media (max-width: 767px) {
+    .months-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .vacation-context-menu {
+        width: calc(100vw - 2rem);
+        left: 1rem !important;
+        top: auto !important;
+        bottom: 1rem;
+    }
+}
+

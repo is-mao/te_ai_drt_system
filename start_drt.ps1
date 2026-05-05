@@ -107,7 +107,14 @@ if ($Stop) {
     $proc = Get-RunningProcess
     if ($proc) {
         Write-Log "Stopping DRT System (PID: $($proc.Id))..."
-        Stop-Process -Id $proc.Id -Force
+        # Kill the process tree (main + reloader child) to avoid orphan python processes
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        Get-Process -Name python* -ErrorAction SilentlyContinue | Where-Object {
+            try {
+                $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId=$($_.Id)" -ErrorAction SilentlyContinue).CommandLine
+                $cmd -and $cmd -match "app\.py"
+            } catch { $false }
+        } | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 1
         if (Test-Path $PidFile) { Remove-Item $PidFile -Force }
         Write-Log "DRT System stopped."
@@ -143,9 +150,12 @@ if (-not (Test-Path $EnvFile)) {
 
 # Check dependencies
 Write-Log "Checking dependencies..."
-Push-Location $ScriptDir
-$depCheck = & $python -c "import flask; print('OK')" 2>$null
-Pop-Location
+try {
+    Push-Location $ScriptDir
+    $depCheck = & $python -c "import flask; print('OK')" 2>$null
+} finally {
+    Pop-Location
+}
 if ("$depCheck".Trim() -ne "OK") {
     Write-Log "Missing dependencies. Installing from requirements.txt..." "WARN"
     $reqFile = Join-Path $ScriptDir "requirements.txt"
@@ -171,6 +181,9 @@ if ($portInUse) {
 Write-Log "Starting DRT System on port $Port..."
 Write-Log "Log file: $LogFile"
 Write-Log "Error log: $ErrorLogFile"
+
+# Set PORT env var so app.py picks up the correct port
+$env:PORT = $Port
 
 $startInfo = @{
     FilePath     = $python
