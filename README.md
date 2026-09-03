@@ -14,6 +14,7 @@ TE 工厂缺陷报告追踪系统，基于 Flask + Google Gemini AI，支持智�
 | **Dashboard** | KPI 概览（总数、各 BU 统计、本周数据）+ 图表（Defect Class 分布、周趋势、Top 10 Station/Server/PCAP/Failure） |
 | **Database Sync** | 通过 SFTP 将本地 SQLite 数据库推送到远程服务器，或从远程拉取；支持选择性 Pull & Merge 其他用户数据 |
 | **Settings** | Gemini API Key + CIRCUIT API 配置、系统信息查看 |
+| **Device Console** | 网页终端，通过跳板机连接 ISR 反向控制台端口（telnet）操作 UUT；支持自动清线、双端口并排、同步打断、命令日志、CONSOLE/Power 同端口保持上电 |
 | **修改密码** | 导航栏用户下拉菜单 → 弹窗修改密码（旧密码验证 + 新密码最少 8 位） |
 
 ### AI 功能（编辑页面内置）
@@ -67,6 +68,19 @@ CIRCUIT_API_ENDPOINT=https://chat-ai.cisco.com/openai/deployments/gemini-3.1-fla
 CIRCUIT_APP_KEY=egai-prd-supplychain-262013805-summarize-1776759998924
 CIRCUIT_ACCESS_TOKEN=your-circuit-oauth-token
 CIRCUIT_MODEL=gemini-3.1-flash-lite
+
+# 可选：Device Console 跳板机链路默认值（页面可临时覆盖，密码不回显）
+CONSOLE_JUMP_HOST=scfam-alln-jump      # 跳板机主机
+CONSOLE_JUMP_PORT=22
+CONSOLE_JUMP_USER=scjump               # 跳板机用户名
+CONSOLE_JUMP_PASSWORD=                 # 跳板机密码
+CONSOLE_ISR_USER=apollo-debug          # ISR 登录用户名
+CONSOLE_ISR_PASSWORD=                  # ISR 登录密码
+CONSOLE_ISR_CLEAR_LINE=true            # 连接前是否默认清线
+CONSOLE_UUT_USER=apollo                # UUT 登录用户名
+CONSOLE_UUT_PASSWORD=                  # UUT 登录密码
+CONSOLE_IDLE_TIMEOUT=28800             # 会话空闲自动断开（秒，默认 8 小时）
+CONSOLE_KEEPALIVE=20                   # SSH 保活间隔（秒，0=关闭）
 ```
 
 ### 3. 启动
@@ -176,6 +190,36 @@ KPI 卡片 + 多维图表，支持按 BU 和日期范围筛选。
 - Access Token 约 1 小时过期，过期后在 Settings 更新
 - 查看系统版本信息
 
+### Device Console
+
+网页版终端（xterm.js），用于通过**跳板机**连接 ISR 反向控制台端口来操作 UUT，复现手工 `ssh 跳板机 → ssh ISR clear line → telnet ISR <port>` 的流程。访问路径 `/device-console`（导航栏 **Console**）。
+
+**连接链路（Jump → ISR → UUT）**
+
+1. **Jump 跳板机**：SSH 登录跳板机并开一个交互 PTY，后续两跳都在其中进行。
+2. **ISR**：在跳板机内 `ssh apollo-debug@<ISR IP>`，自动处理首次 `yes/no` 与密码，用于清除端口线路。
+3. **UUT**：在跳板机内 `telnet <ISR IP> <port>`，自动输入 UUT 用户名/密码，进入设备控制台交互。
+
+页面填 **ISR IP** 与 **Port**（均必填，无默认值），跳板机/各级用户名从 `.env` 预填、密码页面临时输入（不保存）。线路号默认取 `端口 − 2000`（如 2014→line 14），可手动覆盖。
+
+**主要功能**
+
+| 功能 | 说明 |
+|------|------|
+| **自动清线** | 连接前在 ISR 执行 `terminal length 0; show line <port>`（每次先查看状态）再 `clear line <port>` |
+| **双端口并排** | 可填 Port 1 + Port 2，并排打开两个独立控制台（各自会话，经同一跳板机） |
+| **同步打断** | 「同步 Esc 打断」「同步 Ctrl+C 打断」按钮，或勾选 Esc 广播后按 `Esc`，同时打断所有已连接控制台（两台 UUT 同步 break 进 boot） |
+| **命令日志** | 勾选「显示命令日志」可查看实际发送的命令与 `Esc`/`Ctrl+C` 等按键（带时间戳、控制台标签），可复制/清空 |
+| **CONSOLE 与 Power 同端口** | 可选（默认不选）。勾选后清线前先 `config t / line <port> / no modem dtr-active / end` **保持上电**，断开时 `modem dtr-active` 恢复并再次清线 |
+| **复制/粘贴** | 每个控制台独立的复制选中/复制全部/粘贴/清屏；选中后 `Ctrl+C` 复制、`Ctrl+V` 粘贴 |
+| **界面** | MobaXterm 风格黑底配色 + 语法高亮（IP/OK/FAIL/提示符等着色）、DejaVu Mono 字体、WebGL 渲染 |
+| **连接设置折叠** | 连接成功后连接设置卡片自动折叠，节省页面空间；断开后自动展开 |
+| **会话保活/超时** | SSH 保活默认 20 秒（`CONSOLE_KEEPALIVE`）防止空闲被跳板机/防火墙断开；空闲超时默认 8 小时（`CONSOLE_IDLE_TIMEOUT`）；会话结束时显示原因 |
+
+> **运行注意**：Device Console 为**有状态**连接（会话对象在进程内持有 SSH 通道）。若用 gunicorn 多 worker，请将 console 场景固定为**单 worker**，或直接用 `python app.py` / `start_drt.ps1`（单进程）。
+>
+> **路径提示**：调试模式下 Werkzeug 调试器占用 `/console`，因此本功能路由为 `/device-console`。
+
 ---
 
 ## 项目结构
@@ -199,10 +243,12 @@ te_ai_drt_system/
 │   ├── import_export.py    # Excel 导入/导出
 │   ├── ai_analysis.py      # AI 分析/美化/翻译 API
 │   ├── sync.py             # 数据库同步 Push/Pull API
+│   ├── console.py          # Device Console 蓝图（跳板机链路终端 + 轮询 API）
 │   └── settings.py         # 设置页面
 ├── services/               # 业务逻辑
 │   ├── ai_service.py       # Gemini AI 集成（分析、美化、翻译）
 │   ├── db_sync.py          # SFTP 数据库同步
+│   ├── console_service.py  # Device Console 会话管理（telnet IAC、自动登录、清线/电源、保活）
 │   ├── failure_dict.py     # Failure 字典查询
 │   └── historical_search.py # 历史记录搜索
 ├── templates/              # Jinja2 HTML 模板
@@ -224,10 +270,11 @@ te_ai_drt_system/
 | Flask-SQLAlchemy | 3.1.1 |
 | Google Gemini AI | google-genai 1.0+ |
 | Cisco CIRCUIT API | OpenAI-compatible chat completions |
-| Paramiko | 3.5.0（SFTP 同步） |
+| Paramiko | 3.5.0（SFTP 同步 + Device Console SSH 跳板机） |
 | Bootstrap | 5.3（CDN） |
 | Bootstrap Icons | 1.11（CDN） |
 | Chart.js | 4.x（Dashboard 图表） |
+| xterm.js | 5.3（Device Console 网页终端，含 fit / webgl 插件） |
 
 ## License
 

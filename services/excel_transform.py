@@ -109,8 +109,19 @@ def classify_failures_batch(test_step_names):
 
 def _classify_batch_chunk(step_names, results):
     """Classify a chunk of <=25 step names via one API call."""
-    valid_classes_str = json.dumps(DEFECT_CLASS_VALUE_MAP, indent=2)
+    # Filter out HARDWARE from AI prompt when hw_remap_to_test is enabled
+    prompt_classes = DEFECT_CLASS_VALUE_MAP
+    remap_classes = set(_config.get("remap_to_test", []))
+    if remap_classes:
+        prompt_classes = {k: v for k, v in DEFECT_CLASS_VALUE_MAP.items() if k not in remap_classes}
+    valid_classes_str = json.dumps(prompt_classes, indent=2)
     steps_str = "\n".join(f"  {i + 1}. {name}" for i, name in enumerate(step_names))
+
+    repair_rules = []
+    for cls_name in prompt_classes:
+        rc, ra = REPAIR_CLASS_MAP.get(cls_name, ("INTNC", "NONE"))
+        repair_rules.append(f'- If major_defect_class is "{cls_name}" → repair_class="{rc}", repair_action="{ra}"')
+    repair_rules_str = "\n".join(repair_rules)
 
     prompt = f"""You are a manufacturing test failure classification expert for Cisco networking equipment.
 
@@ -120,17 +131,13 @@ Valid defect classes and their allowed values:
 {valid_classes_str}
 
 Repair rules:
-- If major_defect_class is "TEST" → repair_class="INTNC", repair_action="NONE"
-- If major_defect_class is "OPERATOR_PROCESS" → repair_class="INTNC", repair_action="Repaired"
-- If major_defect_class is "SOFTWARE" → repair_class="INTNC", repair_action="Repaired"
-- If major_defect_class is "ORDER" → repair_class="INTNC", repair_action="Repaired"
-- If major_defect_class is "HARDWARE" → repair_class="INTNC", repair_action="Repaired"
+{repair_rules_str}
 
 Failed test step names to classify:
 {steps_str}
 
 For each step, determine:
-- major_defect_class: one of {list(DEFECT_CLASS_VALUE_MAP.keys())}
+- major_defect_class: one of {list(prompt_classes.keys())}
 - defect_non_conform: must be a valid value from the class above
 - defect_description: a brief one-line description of the likely failure cause
 
@@ -250,6 +257,21 @@ def transform_excel(source_file, target_file, use_ai=True):
             print("WARNING: CIRCUIT_ACCESS_TOKEN not set. Using default classification.")
         for s in failure_steps:
             classifications[s] = _default_classification(s)
+
+    # Remap specified classes → TEST
+    remap_classes = set(_config.get("remap_to_test", []))
+    if remap_classes:
+        remap_count = 0
+        for name in classifications:
+            if classifications[name]["major_defect_class"] in remap_classes:
+                orig = classifications[name]["major_defect_class"]
+                classifications[name]["major_defect_class"] = "TEST"
+                classifications[name]["defect_non_conform"] = "COULD_NOT_CLASSIFY"
+                classifications[name]["repair_class"] = "INTNC"
+                classifications[name]["repair_action"] = "NONE"
+                remap_count += 1
+        if remap_count:
+            print(f"Remapped {remap_count} classifications → TEST (from {remap_classes})")
 
     # Step 2: Build target DataFrame
     datetime_format = "%Y-%m-%d %H:%M:%S"

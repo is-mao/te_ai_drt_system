@@ -1,0 +1,607 @@
+{% extends "base.html" %}
+{% block title %}Device Console - DRT System{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/dejavu-mono/index.css">
+
+<!-- Page Header -->
+<div class="page-header">
+    <div>
+        <h4><i class="bi bi-terminal me-2" style="color: var(--primary);"></i>Device Console</h4>
+        <div class="page-subtitle">输入 ISR IP 与密码，点击「开始连接」，即可在下方终端中交互操作</div>
+    </div>
+</div>
+
+<!-- Connection settings (collapsible) -->
+<div class="card mb-2">
+    <div class="card-header d-flex align-items-center py-1">
+        <button class="btn btn-sm btn-link text-decoration-none p-0 me-2" type="button"
+                data-bs-toggle="collapse" data-bs-target="#connBody" aria-expanded="true" id="connToggle" title="展开/收起">
+            <i class="bi bi-chevron-down" id="connChevron"></i>
+        </button>
+        <span class="small fw-semibold"><i class="bi bi-diagram-3 me-1"></i>连接设置（跳板机 → ISR → UUT）</span>
+        <span class="badge bg-secondary ms-2" id="status">未连接</span>
+        <span class="ms-auto small text-muted" id="connSummary"></span>
+    </div>
+    <div class="collapse show" id="connBody">
+    <div class="card-body">
+        <!-- Step 1: Jump host -->
+        <div class="mb-2 fw-semibold small text-primary"><i class="bi bi-1-circle me-1"></i>跳板机 Jump</div>
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-4">
+                <label class="form-label small text-muted mb-1">Jump 主机</label>
+                <input type="text" class="form-control form-control-sm" id="jumpHost" placeholder="scfam-alln-jump" autocomplete="off">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">用户名</label>
+                <input type="text" class="form-control form-control-sm" id="jumpUser" placeholder="scjump" autocomplete="off">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">密码</label>
+                <input type="password" class="form-control form-control-sm" id="jumpPass" placeholder="跳板机密码" autocomplete="new-password">
+            </div>
+        </div>
+
+        <!-- Step 2: ISR -->
+        <div class="mb-2 fw-semibold small text-primary"><i class="bi bi-2-circle me-1"></i>ISR（用于清除端口线路）</div>
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-4">
+                <label class="form-label small text-muted mb-1">ISR IP <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm" id="isrHost" placeholder="必填，请输入 ISR IP" required autocomplete="off">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">用户名</label>
+                <input type="text" class="form-control form-control-sm" id="isrUser" placeholder="apollo-debug" autocomplete="off">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">密码</label>
+                <input type="password" class="form-control form-control-sm" id="isrPass" placeholder="ISR 密码" autocomplete="new-password">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">线路号(可选)</label>
+                <input type="text" class="form-control form-control-sm" id="lineNo" placeholder="自动=端口-2000" autocomplete="off">
+            </div>
+        </div>
+
+        <!-- Step 3: UUT -->
+        <div class="mb-2 fw-semibold small text-primary"><i class="bi bi-3-circle me-1"></i>UUT 控制台（telnet ISR IP PORT，可填两个端口并排打开）</div>
+        <div class="row g-2">
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Port 1 <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm" id="uutPort" placeholder="必填，如 2004" required autocomplete="off">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Port 2（可选）</label>
+                <input type="text" class="form-control form-control-sm" id="uutPort2" placeholder="填写则并排开第二个" autocomplete="off">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">UUT 用户名</label>
+                <input type="text" class="form-control form-control-sm" id="uutUser" placeholder="apollo" autocomplete="off">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">UUT 密码</label>
+                <input type="password" class="form-control form-control-sm" id="uutPass" placeholder="UUT 登录密码" autocomplete="new-password">
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center flex-wrap gap-2 mt-3">
+            <button class="btn btn-primary" id="connectBtn"><i class="bi bi-play-fill me-1"></i>开始连接</button>
+            <button class="btn btn-outline-secondary" id="disconnectBtn" disabled><i class="bi bi-stop-fill me-1"></i>断开</button>
+            <div class="form-check ms-1">
+                <input class="form-check-input" type="checkbox" id="clearLine" checked>
+                <label class="form-check-label small" for="clearLine">连接前清除端口线路 (clear line)</label>
+            </div>
+            <div class="form-check ms-1">
+                <input class="form-check-input" type="checkbox" id="powerSame">
+                <label class="form-check-label small" for="powerSame" title="CONSOLE 与 Power 为同一端口时，清线前先 no modem dtr-active 保持上电，断开时恢复 modem dtr-active">CONSOLE 与 Power 同端口（清线时保持上电）</label>
+            </div>
+        </div>
+        <div class="text-muted small mt-2">
+            <i class="bi bi-info-circle me-1"></i>填两个 Port 会并排打开两个控制台（都经同一跳板机）。勾选「CONSOLE 与 Power 同端口」后：清线前会在 ISR 上执行 <code>config t / line &lt;port&gt; / no modem dtr-active / end</code> 保持上电，断开时会执行 <code>modem dtr-active</code> 恢复并再次清线。密码仅用于本次连接，不会保存。
+        </div>
+    </div>
+    </div>
+</div>
+
+<!-- Console group: interrupt controls + command log (toggle) + consoles -->
+<div class="card mb-2">
+    <div class="card-header d-flex align-items-center flex-wrap gap-2 py-1">
+        <span class="small fw-semibold"><i class="bi bi-terminal me-1"></i>控制台</span>
+        <button class="btn btn-sm btn-warning py-0" id="escAllBtn" disabled title="向所有已连接的控制台发送 Esc（同步打断）"><i class="bi bi-x-octagon me-1"></i>同步 Esc 打断</button>
+        <button class="btn btn-sm btn-warning py-0" id="ctrlCAllBtn" disabled title="向所有已连接的控制台发送 Ctrl+C（同步打断）"><i class="bi bi-slash-circle me-1"></i>同步 Ctrl+C 打断</button>
+        <div class="form-check form-check-inline m-0">
+            <input class="form-check-input" type="checkbox" id="escBroadcast" checked>
+            <label class="form-check-label small" for="escBroadcast">Esc 广播</label>
+        </div>
+        <div class="form-check form-check-inline m-0">
+            <input class="form-check-input" type="checkbox" id="showLog">
+            <label class="form-check-label small" for="showLog">显示命令日志</label>
+        </div>
+    </div>
+    <div class="card-body p-2">
+        <!-- Sent-input / command log (shown only when 显示命令日志 is checked) -->
+        <div id="logWrap" class="mb-2" style="display:none;">
+            <div class="d-flex align-items-center mb-1">
+                <span class="small text-muted"><i class="bi bi-card-list me-1"></i>输入/命令日志（实际发送的命令与 Esc 等按键）</span>
+                <div class="ms-auto d-flex align-items-center gap-1">
+                    <button class="btn btn-sm btn-outline-secondary py-0" id="logCopyBtn" title="复制全部日志"><i class="bi bi-clipboard"></i> 复制</button>
+                    <button class="btn btn-sm btn-outline-secondary py-0" id="logClearBtn" title="清空日志"><i class="bi bi-eraser"></i> 清空</button>
+                </div>
+            </div>
+            <select id="cmdLog" class="form-select form-select-sm" multiple size="5"
+                    style="font-family:'DejaVu Mono','Consolas',monospace; font-size:12px; background:#0d1117; color:#d4d4d4; border-color:#30363d;"></select>
+        </div>
+
+        <!-- Interactive consoles (one or two side by side) -->
+        <div class="row g-2" id="consoleRow">
+            <div class="col-12" id="panelCol0">
+                <div class="card h-100">
+                    <div class="card-header d-flex align-items-center py-1">
+                        <span class="small"><i class="bi bi-window-fullscreen me-1"></i><span id="title0">控制台 1</span></span>
+                        <span class="badge bg-secondary ms-2" id="status0">未连接</span>
+                        <div class="ms-auto d-flex align-items-center gap-1">
+                            <button class="btn btn-sm btn-outline-secondary py-0" id="copySel0" title="复制选中"><i class="bi bi-clipboard"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary py-0" id="copyAll0" title="复制全部"><i class="bi bi-clipboard-check"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary py-0" id="paste0" title="粘贴"><i class="bi bi-clipboard-plus"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary py-0" id="clear0" title="清屏"><i class="bi bi-eraser"></i></button>
+                            <span class="badge bg-success" id="toast0" style="display:none;">已复制</span>
+                        </div>
+                    </div>
+                    <div class="card-body p-0" style="background:#000000; border-radius:0 0 8px 8px;">
+                        <div id="term0" style="height:62vh; padding:8px 6px 6px 10px;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12" id="panelCol1" style="display:none;">
+                <div class="card h-100">
+                    <div class="card-header d-flex align-items-center py-1">
+                        <span class="small"><i class="bi bi-window-fullscreen me-1"></i><span id="title1">控制台 2</span></span>
+                        <span class="badge bg-secondary ms-2" id="status1">未连接</span>
+                        <div class="ms-auto d-flex align-items-center gap-1">
+                            <button class="btn btn-sm btn-outline-secondary py-0" id="copySel1" title="复制选中"><i class="bi bi-clipboard"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary py-0" id="copyAll1" title="复制全部"><i class="bi bi-clipboard-check"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary py-0" id="paste1" title="粘贴"><i class="bi bi-clipboard-plus"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary py-0" id="clear1" title="清屏"><i class="bi bi-eraser"></i></button>
+                            <span class="badge bg-success" id="toast1" style="display:none;">已复制</span>
+                        </div>
+                    </div>
+                    <div class="card-body p-0" style="background:#000000; border-radius:0 0 8px 8px;">
+                        <div id="term1" style="height:62vh; padding:8px 6px 6px 10px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-webgl@0.16.0/lib/xterm-addon-webgl.min.js"></script>
+<script>
+(function () {
+    // MobaXterm-style dark palette (tuned Tango colors, readable on black).
+    const mobaTheme = {
+        background: '#000000', foreground: '#d4d4d4',
+        cursor: '#33ff66', cursorAccent: '#000000',
+        selectionBackground: '#264f78', selectionForeground: '#ffffff',
+        black: '#2e3436', red: '#e04343', green: '#4fc414', yellow: '#d9b400',
+        blue: '#3b8eea', magenta: '#c745c7', cyan: '#26bbd1', white: '#cccccc',
+        brightBlack: '#6d7176', brightRed: '#ff5f5f', brightGreen: '#8ae234',
+        brightYellow: '#fce94f', brightBlue: '#79b6ff', brightMagenta: '#e67ee6',
+        brightCyan: '#54e5ec', brightWhite: '#ffffff',
+    };
+    const TERM_OPTS = {
+        cursorBlink: true, cursorStyle: 'block',
+        fontFamily: '"DejaVu Mono", "DejaVu Sans Mono", "Cascadia Mono", "Consolas", "Liberation Mono", monospace',
+        fontSize: 12, fontWeight: '400', fontWeightBold: '700',
+        lineHeight: 1.15, letterSpacing: 0, drawBoldTextInBrightColors: true,
+        scrollback: 20000, theme: mobaTheme,
+    };
+
+    // MobaXterm-style client-side syntax highlighting for plain console text.
+    const HL_RE = /(?<ip>\b(?:\d{1,3}\.){3}\d{1,3}\b)|(?<bracket>\[[^\]\r\n]{0,24}\])|(?<neg>\b(?:FAILED|FAIL|ERRORS?|ERR|DOWN|DENIED|INVALID|UNABLE|CANNOT|REJECTED?|TIMEOUT|CRC|DROP(?:PED)?|ALERT|CRITICAL)\b)|(?<pos>\b(?:OK|UP|SUCCESS(?:FULLY)?|CURRENT|ENABLED?|ACTIVE|PASSED?|GOOD|DONE|READY|COMPLETE[D]?|ONLINE)\b)|(?<warn>\b(?:WARN(?:ING)?|UPGD|NEED|PENDING|CONFIRM|RELOAD|BOOTING|NOTICE)\b)|(?<prompt>^[A-Za-z0-9._\/@:\-]+[>#])|(?<num>\b\d+\b)/gim;
+    function colorize(text) {
+        if (!text || text.indexOf('\x1b') !== -1) return text;
+        return text.replace(HL_RE, function () {
+            const g = arguments[arguments.length - 1] || {};
+            const m = arguments[0];
+            let c = null;
+            if (g.ip) c = '96'; else if (g.bracket) c = '93';
+            else if (g.neg) c = '91'; else if (g.pos) c = '92';
+            else if (g.warn) c = '93'; else if (g.prompt) c = '92';
+            else if (g.num) c = '94';
+            return c ? '\x1b[' + c + 'm' + m + '\x1b[0m' : m;
+        });
+    }
+
+    const consoles = [];
+    function broadcastEsc() {
+        let n = 0;
+        consoles.forEach(function (c) { if (c.isConnected()) { c.sendInput('\x1b'); n++; } });
+        return n;
+    }
+    function broadcastCtrlC() {
+        let n = 0;
+        consoles.forEach(function (c) { if (c.isConnected()) { c.sendInput('\x03'); n++; } });
+        return n;
+    }
+    function anyConnected() { return consoles.some(function (c) { return c.isConnected(); }); }
+
+    // ---- Sent-input / command log ----
+    let cmdLogEl = null;  // resolved after DOM refs below
+    function keyName(code) {
+        switch (code) {
+            case 0x1b: return 'Esc ⎋';
+            case 0x03: return 'Ctrl+C (^C)';
+            case 0x1a: return 'Ctrl+Z (^Z)';
+            case 0x04: return 'Ctrl+D (^D)';
+            case 0x12: return 'Ctrl+R (^R)';
+            case 0x15: return 'Ctrl+U (^U)';
+            case 0x09: return 'Tab';
+            case 0x08: case 0x7f: return 'Backspace';
+            case 0x00: return 'Ctrl+Space';
+        }
+        if (code >= 1 && code <= 26) return 'Ctrl+' + String.fromCharCode(code + 64);
+        return '0x' + code.toString(16);
+    }
+    function logCmd(idx, text) {
+        if (!cmdLogEl) return;
+        const label = idx === 0 ? '控制台1' : idx === 1 ? '控制台2' : (idx === -1 ? '广播' : '系统');
+        const ts = new Date().toLocaleTimeString();
+        const opt = document.createElement('option');
+        opt.textContent = '[' + ts + '] ' + label + ' → ' + text;
+        cmdLogEl.appendChild(opt);
+        while (cmdLogEl.options.length > 500) cmdLogEl.remove(0);
+        cmdLogEl.scrollTop = cmdLogEl.scrollHeight;
+    }
+
+    function copyTextTo(text, showToast) {
+        if (!text) { showToast('无选中内容'); return; }
+        (async function () {
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text); showToast('已复制'); return;
+                }
+            } catch (e) {}
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+                document.body.appendChild(ta); ta.focus(); ta.select();
+                const ok = document.execCommand('copy'); document.body.removeChild(ta);
+                showToast(ok ? '已复制' : '复制失败');
+            } catch (e) { showToast('复制失败'); }
+        })();
+    }
+
+    function makeConsole(idx) {
+        const term = new Terminal(TERM_OPTS);
+        const fit = new FitAddon.FitAddon();
+        term.loadAddon(fit);
+        term.open(document.getElementById('term' + idx));
+        try {
+            if (window.WebglAddon) {
+                const webgl = new WebglAddon.WebglAddon();
+                webgl.onContextLoss(function () { try { webgl.dispose(); } catch (e) {} });
+                term.loadAddon(webgl);
+            }
+        } catch (e) {}
+        try { fit.fit(); } catch (e) {}
+        if (document.fonts && document.fonts.load) {
+            document.fonts.load('12px "DejaVu Mono"').then(function () {
+                try { if (term.clearTextureAtlas) term.clearTextureAtlas(); fit.fit(); term.refresh(0, term.rows - 1); } catch (e) {}
+            }).catch(function () {});
+        }
+
+        let sessionId = null, cursor = 0, polling = false, connected = false, lineBuf = '';
+        const statusEl = document.getElementById('status' + idx);
+        const titleEl = document.getElementById('title' + idx);
+        const toastEl = document.getElementById('toast' + idx);
+
+        function setStatus(t, c) { statusEl.textContent = t; statusEl.className = 'badge ms-2 bg-' + c; }
+        function showToast(t) {
+            toastEl.textContent = t || '已复制'; toastEl.style.display = 'inline-block';
+            clearTimeout(showToast._t); showToast._t = setTimeout(function () { toastEl.style.display = 'none'; }, 1200);
+        }
+        // Log sent input: group printable chars into command lines, name control keys.
+        function logSent(data) {
+            for (let i = 0; i < data.length; i++) {
+                const ch = data[i];
+                const code = ch.charCodeAt(0);
+                if (ch === '\r' || ch === '\n') {
+                    if (lineBuf.length) { logCmd(idx, '命令: ' + lineBuf); lineBuf = ''; }
+                    else { logCmd(idx, '⏎ 回车'); }
+                } else if (code < 32 || code === 127) {
+                    if (lineBuf.length) { logCmd(idx, '(未回车) ' + lineBuf); lineBuf = ''; }
+                    logCmd(idx, '按键: ' + keyName(code));
+                } else {
+                    lineBuf += ch;
+                }
+            }
+        }
+        function sendInput(data) {
+            if (!sessionId || !data) return;
+            logSent(data);
+            fetch('/api/console/input', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: sessionId, data: data }) }).catch(function () {});
+        }
+        function sendResize() {
+            if (!sessionId) return;
+            fetch('/api/console/resize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: sessionId, cols: term.cols, rows: term.rows }) }).catch(function () {});
+        }
+        function endSession(msg) { if (msg) term.write('\r\n[' + msg + ']\r\n'); sessionId = null; connected = false; setStatus('未连接', 'secondary'); syncGlobal(); }
+        async function poll() {
+            if (!sessionId || polling) return; polling = true;
+            try {
+                const r = await fetch('/api/console/output?session_id=' + sessionId + '&cursor=' + cursor);
+                if (r.status === 404) { endSession('会话已结束（服务端已无此会话）'); return; }
+                const j = await r.json();
+                if (j.data) term.write(colorize(j.data));
+                if (typeof j.cursor === 'number') cursor = j.cursor;
+                if (j.closed) { endSession('会话已结束' + (j.reason ? '：' + j.reason : '')); return; }
+            } catch (e) {} finally { polling = false; }
+        }
+        function getAllText() {
+            const buf = term.buffer.active; const lines = [];
+            for (let i = 0; i < buf.length; i++) { const line = buf.getLine(i); lines.push(line ? line.translateToString(true) : ''); }
+            while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+            return lines.join('\n');
+        }
+        async function pasteClipboard() {
+            try {
+                if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) {
+                    const t = await navigator.clipboard.readText(); if (t) { sendInput(t); term.focus(); } return;
+                }
+            } catch (e) {}
+            term.focus(); showToast('请用 Ctrl+V 粘贴');
+        }
+
+        term.onData(sendInput);
+        term.attachCustomKeyEventHandler(function (e) {
+            if (e.type !== 'keydown') return true;
+            const k = (e.key || '').toLowerCase();
+            if (e.key === 'Escape') {
+                if (escBroadcastEl.checked) { broadcastEsc(); return false; }
+                return true;
+            }
+            if (e.ctrlKey && e.shiftKey && k === 'c') { copyTextTo(term.getSelection(), showToast); return false; }
+            if (e.ctrlKey && e.shiftKey && k === 'v') { pasteClipboard(); return false; }
+            if (e.ctrlKey && !e.shiftKey && !e.altKey && k === 'c') {
+                const sel = term.getSelection();
+                if (sel && sel.length > 0) { copyTextTo(sel, showToast); term.clearSelection(); return false; }
+            }
+            return true;
+        });
+        document.getElementById('copySel' + idx).addEventListener('click', function () { copyTextTo(term.getSelection(), showToast); });
+        document.getElementById('copyAll' + idx).addEventListener('click', function () { copyTextTo(getAllText(), showToast); });
+        document.getElementById('paste' + idx).addEventListener('click', pasteClipboard);
+        document.getElementById('clear' + idx).addEventListener('click', function () { term.clear(); term.focus(); });
+
+        async function connect(params) {
+            setStatus('连接中...', 'warning');
+            lineBuf = '';
+            logCmd(idx, '── 开始连接 ' + params.isr_host + ':' + params.uut_port + ' ──');
+            term.write('\r\n[connecting via jump ' + params.jump_host + ' -> ' + params.isr_host + ':' + params.uut_port + ' ...]\r\n');
+            try {
+                const r = await fetch('/api/console/connect-jump', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
+                const j = await r.json();
+                if (!j.success) { term.write('\r\n[连接失败] ' + (j.error || '未知错误') + '\r\n'); setStatus('失败', 'danger'); connected = false; syncGlobal(); return false; }
+                sessionId = j.session_id; cursor = 0; connected = true;
+                setStatus('已连接 ' + j.host + ':' + j.port, 'success'); term.focus(); sendResize(); syncGlobal(); return true;
+            } catch (e) { term.write('\r\n[连接失败] ' + e + '\r\n'); setStatus('未连接', 'secondary'); connected = false; syncGlobal(); return false; }
+        }
+        async function disconnect() {
+            if (!sessionId) return;
+            const sid = sessionId;
+            lineBuf = '';
+            logCmd(idx, '── 断开 ──');
+            // When CONSOLE and Power share the port, the server reverts DTR
+            // (modem dtr-active) before closing; keep polling so the revert
+            // progress streams into this terminal until the session closes.
+            const reverting = powerSameEl.checked && clearLineEl.checked;
+            if (reverting) {
+                setStatus('断开中(恢复电源)...', 'warning');
+                term.write('\r\n[正在断开并恢复电源设置 (modem dtr-active)，请稍候...]\r\n');
+            } else {
+                sessionId = null; connected = false; setStatus('未连接', 'secondary');
+                term.write('\r\n[已断开]\r\n');
+            }
+            try { await fetch('/api/console/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: sid }) }); } catch (e) {}
+            syncGlobal();
+        }
+
+        return {
+            idx: idx, term: term, fit: fit, connect: connect, disconnect: disconnect,
+            poll: poll, resize: sendResize, sendInput: sendInput,
+            isConnected: function () { return connected; },
+            setTitle: function (t) { titleEl.textContent = t; },
+            welcome: function () { term.write('欢迎使用 Device Console。填写信息后点击“开始连接”。\r\n'); },
+        };
+    }
+
+    // ---- Form elements ----
+    const jumpHostEl = document.getElementById('jumpHost');
+    const jumpUserEl = document.getElementById('jumpUser');
+    const jumpPassEl = document.getElementById('jumpPass');
+    const isrHostEl = document.getElementById('isrHost');
+    const isrUserEl = document.getElementById('isrUser');
+    const isrPassEl = document.getElementById('isrPass');
+    const lineNoEl = document.getElementById('lineNo');
+    const uutPortEl = document.getElementById('uutPort');
+    const uutPort2El = document.getElementById('uutPort2');
+    const uutUserEl = document.getElementById('uutUser');
+    const uutPassEl = document.getElementById('uutPass');
+    const clearLineEl = document.getElementById('clearLine');
+    const powerSameEl = document.getElementById('powerSame');
+    const escBroadcastEl = document.getElementById('escBroadcast');
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const escAllBtn = document.getElementById('escAllBtn');
+    const ctrlCAllBtn = document.getElementById('ctrlCAllBtn');
+    const showLogChk = document.getElementById('showLog');
+    const logWrap = document.getElementById('logWrap');
+    const connBody = document.getElementById('connBody');
+    const connChevron = document.getElementById('connChevron');
+    const connSummary = document.getElementById('connSummary');
+    const statusEl = document.getElementById('status');
+    cmdLogEl = document.getElementById('cmdLog');
+    document.getElementById('logClearBtn').addEventListener('click', function () { cmdLogEl.innerHTML = ''; });
+    document.getElementById('logCopyBtn').addEventListener('click', function () {
+        const lines = Array.prototype.map.call(cmdLogEl.options, function (o) { return o.textContent; }).join('\n');
+        copyTextTo(lines || '(空)', function (m) {
+            const b = document.getElementById('logCopyBtn');
+            const old = b.innerHTML; b.innerHTML = '<i class="bi bi-check2"></i> ' + m;
+            setTimeout(function () { b.innerHTML = old; }, 1000);
+        });
+    });
+
+    // Toggle the command-log panel visibility (default hidden).
+    showLogChk.addEventListener('change', function () {
+        logWrap.style.display = showLogChk.checked ? '' : 'none';
+        setTimeout(function () { consoles.forEach(function (c) { try { c.fit.fit(); c.resize(); } catch (e) {} }); }, 60);
+    });
+
+    // Collapse helper for the connection settings card.
+    function setConnCollapsed(collapsed) {
+        try {
+            if (window.bootstrap && bootstrap.Collapse) {
+                bootstrap.Collapse.getOrCreateInstance(connBody, { toggle: false })[collapsed ? 'hide' : 'show']();
+            } else {
+                connBody.classList.toggle('show', !collapsed);
+            }
+        } catch (e) { connBody.classList.toggle('show', !collapsed); }
+    }
+    connBody.addEventListener('shown.bs.collapse', function () {
+        connChevron.className = 'bi bi-chevron-down';
+        setTimeout(function () { consoles.forEach(function (c) { try { c.fit.fit(); c.resize(); } catch (e) {} }); }, 60);
+    });
+    connBody.addEventListener('hidden.bs.collapse', function () {
+        connChevron.className = 'bi bi-chevron-right';
+        setTimeout(function () { consoles.forEach(function (c) { try { c.fit.fit(); c.resize(); } catch (e) {} }); }, 60);
+    });
+
+    const formEls = [jumpHostEl, jumpUserEl, jumpPassEl, isrHostEl, isrUserEl,
+                     isrPassEl, lineNoEl, uutPortEl, uutPort2El, uutUserEl, uutPassEl, clearLineEl, powerSameEl];
+
+    function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = 'badge ms-2 bg-' + cls; }
+
+    // Keep global controls in sync with per-console state.
+    function syncGlobal() {
+        const on = anyConnected();
+        escAllBtn.disabled = !on;
+        ctrlCAllBtn.disabled = !on;
+        disconnectBtn.disabled = !on;
+        connectBtn.disabled = on;
+        formEls.forEach(function (el) { el.disabled = on; });
+        setStatus(on ? '已连接' : '未连接', on ? 'success' : 'secondary');
+    }
+    function setFormDisabled(on) {
+        connectBtn.disabled = on;
+        disconnectBtn.disabled = !on;
+        formEls.forEach(function (el) { el.disabled = on; });
+    }
+
+    function showPanels(n) {
+        const col0 = document.getElementById('panelCol0');
+        const col1 = document.getElementById('panelCol1');
+        if (n >= 2) { col0.className = 'col-12 col-xl-6'; col1.className = 'col-12 col-xl-6'; col1.style.display = ''; }
+        else { col0.className = 'col-12'; col1.style.display = 'none'; }
+        setTimeout(function () { consoles.forEach(function (c) { try { c.fit.fit(); c.resize(); } catch (e) {} }); }, 60);
+    }
+
+    consoles.push(makeConsole(0));
+    consoles.push(makeConsole(1));
+
+    setInterval(function () { consoles.forEach(function (c) { c.poll(); }); }, 300);
+
+    function baseParams() {
+        return {
+            jump_host: jumpHostEl.value.trim(), jump_user: jumpUserEl.value, jump_password: jumpPassEl.value,
+            isr_host: isrHostEl.value.trim(), isr_user: isrUserEl.value, isr_password: isrPassEl.value,
+            clear_line: clearLineEl.checked, power_same: powerSameEl.checked,
+            uut_user: uutUserEl.value, uut_password: uutPassEl.value,
+        };
+    }
+
+    async function doConnect() {
+        const jumpHost = jumpHostEl.value.trim();
+        const isrHost = isrHostEl.value.trim();
+        const port1 = uutPortEl.value.trim();
+        const port2 = uutPort2El.value.trim();
+        isrHostEl.classList.toggle('is-invalid', !isrHost);
+        uutPortEl.classList.toggle('is-invalid', !port1);
+        if (!jumpHost) { consoles[0].term.write('\r\n[请填写跳板机主机]\r\n'); jumpHostEl.focus(); return; }
+        if (!isrHost) { consoles[0].term.write('\r\n[请填写 ISR IP（必填）]\r\n'); isrHostEl.focus(); return; }
+        if (!port1) { consoles[0].term.write('\r\n[请填写 Port 1（必填）]\r\n'); uutPortEl.focus(); return; }
+        if (!/^\d+$/.test(port1)) { consoles[0].term.write('\r\n[Port 1 必须是数字]\r\n'); uutPortEl.classList.add('is-invalid'); uutPortEl.focus(); return; }
+        if (port2 && !/^\d+$/.test(port2)) { consoles[0].term.write('\r\n[Port 2 必须是数字]\r\n'); uutPort2El.classList.add('is-invalid'); uutPort2El.focus(); return; }
+
+        const two = !!port2;
+        showPanels(two ? 2 : 1);
+        setFormDisabled(true);
+
+        const p0 = baseParams();
+        p0.uut_port = port1;
+        p0.line_number = two ? '' : lineNoEl.value.trim();  // manual line override only in single mode
+        consoles[0].setTitle('控制台 1 · Port ' + port1);
+        await consoles[0].connect(p0);
+
+        if (two) {
+            const p1 = baseParams();
+            p1.uut_port = port2;
+            p1.line_number = '';
+            consoles[1].setTitle('控制台 2 · Port ' + port2);
+            await consoles[1].connect(p1);
+        }
+        // Auto-collapse the connection panel to save space; show a summary.
+        if (anyConnected()) {
+            connSummary.textContent = isrHost + ' · Port ' + port1 + (two ? (', ' + port2) : '');
+            setConnCollapsed(true);
+        }
+        setTimeout(function () { consoles.forEach(function (c) { try { c.fit.fit(); c.resize(); } catch (e) {} }); }, 200);
+        syncGlobal();
+    }
+
+    async function doDisconnectAll() {
+        for (const c of consoles) { await c.disconnect(); }
+        connSummary.textContent = '';
+        setConnCollapsed(false);
+        syncGlobal();
+    }
+
+    connectBtn.addEventListener('click', doConnect);
+    disconnectBtn.addEventListener('click', doDisconnectAll);
+    escAllBtn.addEventListener('click', function () { broadcastEsc(); });
+    ctrlCAllBtn.addEventListener('click', function () { broadcastCtrlC(); });
+    uutPassEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') doConnect(); });
+    uutPort2El.addEventListener('keydown', function (e) { if (e.key === 'Enter') doConnect(); });
+    isrHostEl.addEventListener('input', function () { isrHostEl.classList.remove('is-invalid'); });
+    uutPortEl.addEventListener('input', function () { uutPortEl.classList.remove('is-invalid'); });
+
+    // Global Esc broadcast when focus is outside form fields / terminal textareas.
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        const tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (!escBroadcastEl.checked) return;
+        if (anyConnected()) { e.preventDefault(); broadcastEsc(); }
+    });
+
+    window.addEventListener('resize', function () { consoles.forEach(function (c) { try { c.fit.fit(); c.resize(); } catch (e) {} }); });
+
+    // Prefill hosts/usernames from .env defaults (no passwords).
+    fetch('/api/console/config').then(function (r) { return r.json(); }).then(function (cfg) {
+        const jump = cfg.jump || {}, isr = cfg.isr || {}, uut = cfg.uut || {};
+        if (jump.host && !jumpHostEl.value) jumpHostEl.value = jump.host;
+        if (jump.username && !jumpUserEl.value) jumpUserEl.value = jump.username;
+        if (isr.username && !isrUserEl.value) isrUserEl.value = isr.username;
+        if (typeof isr.clear_line === 'boolean') clearLineEl.checked = isr.clear_line;
+        if (uut.username && !uutUserEl.value) uutUserEl.value = uut.username;
+    }).catch(function () {});
+
+    consoles[0].welcome();
+    syncGlobal();
+})();
+</script>
+{% endblock %}

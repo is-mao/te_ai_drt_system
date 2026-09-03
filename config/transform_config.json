@@ -43,6 +43,7 @@
       "MEMORY_FAILURE", "PCBA_FAILURE"
     ]
   },
+  "remap_to_test": ["HARDWARE", "SOFTWARE"],
   "repair_class_map": {
     "TEST":             ["INTNC", "NONE"],
     "OPERATOR_PROCESS": ["INTNC", "Repaired"],
